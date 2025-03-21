@@ -87,6 +87,45 @@ def add_todo():
 #         return jsonify({"status": "error", "message": str(e)})
 
 
+from transformers import T5Tokenizer, T5ForConditionalGeneration
+import torch
+from huggingface_hub import login
+
+# Define the upload folder
+UPLOAD_FOLDER = "uploads"
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+
+# Log in using the token (ONLY for private models)
+access_token = "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"
+login(token=access_token)
+
+# Load the model from Hugging Face
+# Load model directly
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+tokenizer = AutoTokenizer.from_pretrained("SOham01/results")
+model = AutoModelForSeq2SeqLM.from_pretrained("SOham01/results")
+
+# Set model to evaluation mode
+model.eval()
+
+# Function to generate predictions using the fine-tuned model
+def generate_prediction(text):
+    # Tokenize the input text
+    inputs = tokenizer(f"summarize: {text}", return_tensors="pt", max_length=512, truncation=True)
+    
+    # Generate output
+    with torch.no_grad():
+        outputs = model.generate(**inputs)
+    
+    # Decode the output
+    prediction = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return prediction
+
+
+# API endpoint to upload and process PDF
 @app.route("/upload/", methods=["POST"])
 def upload_pdf():
     print(request.files)
@@ -98,18 +137,27 @@ def upload_pdf():
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
         print(file_path)
+
         # Convert PDF to images
         image_paths = pdf_to_images(file_path)
 
         extracted_text = []
         for i, img_path in enumerate(image_paths):
             try:
+                # Extract text from the image
                 text = extract_data_from_image(img_path)
                 extracted_text.append(text)
+
+                # Store the extracted text in ChromaDB
                 try:
                     store_in_chromadb(text, f"{file.filename}_page_{i}")
                 except Exception as e:
                     print(f"Error storing in ChromaDB: {str(e)}")
+
+                # Generate predictions using the fine-tuned model
+                prediction = generate_prediction(text)
+                extracted_text.append(f"Prediction for page {i}: {prediction}")
+
             except Exception as e:
                 print(f"Error extracting text from page {i}: {str(e)}")
                 extracted_text.append(f"Error extracting text from page {i}")
@@ -117,10 +165,14 @@ def upload_pdf():
         if not extracted_text:
             return jsonify({"error": "Failed to extract any text"}), 500
 
-        return jsonify({"message": "Extraction successful", "data": "\n\n\n".join(extracted_text).replace("Ġ","")})
+        # Join all extracted text and predictions into a single string
+        result_text = "\n\n\n".join(extracted_text).replace("Ġ", "")
+
+        return jsonify({"message": "Extraction and prediction successful", "data": result_text})
 
     except Exception as e:
         return jsonify({"error": f"Extraction failed: {str(e)}"}), 500
 
+# Run the Flask app
 if __name__ == "__main__":
     app.run(debug=True)
