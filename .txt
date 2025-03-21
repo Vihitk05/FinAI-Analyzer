@@ -1,0 +1,15 @@
+financial_analysis/
+│── backend/
+│   ├── app.py                # Flask App Entry Point
+│   ├── requirements.txt       # Dependencies
+│   ├── config.py              # Configuration File
+│   ├── utils/
+│   │   ├── pdf_processing.py  # Convert PDF to Images
+│   │   ├── text_extraction.py # Extract Text Using LayoutLMv3
+│   │   ├── vector_storage.py  # Store Data in ChromaDB
+│   ├── models/
+│   │   ├── financial_model.py # Future LLaMA Model Analysis
+│── data/                      # Folder for Uploaded PDFs
+│── temp_images/               # Temporary Folder for Images
+│── chroma_db/                 # ChromaDB Storage
+│── README.md                  # Project Documentation
