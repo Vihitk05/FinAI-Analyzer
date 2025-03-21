@@ -3,7 +3,7 @@
 chroma_db/
 temp_images/
 data/
-
+__pycache__/
 env
 venv
 # dependencies
