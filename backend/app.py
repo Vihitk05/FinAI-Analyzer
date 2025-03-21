@@ -1,15 +1,18 @@
 from flask import Flask, request, jsonify, render_template
 from pymongo import MongoClient
-# import pdfplumber
-# import pymupdf4llm
-# import pymupdf
 import os
 from utils.pdf_processing import pdf_to_images
 from utils.text_extraction import extract_data_from_image
 from utils.vector_storage import store_in_chromadb
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+import torch
+from huggingface_hub import login
 
+# Initialize Flask app
 app = Flask(__name__)
-UPLOAD_FOLDER = "data"
+
+# Define upload folder
+UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Connect to MongoDB (local instance)
@@ -17,6 +20,39 @@ client = MongoClient('mongodb://localhost:27017/')
 db = client.flask_db
 todos = db.todos
 
+# Hugging Face Hub login (if using a private model)
+access_token = "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"  # Replace with your actual token
+login(token=access_token)
+
+# Load the tokenizer and model
+try:
+    print("Loading tokenizer and model...")
+    tokenizer = AutoTokenizer.from_pretrained("SOham01/results")
+    model = AutoModelForSeq2SeqLM.from_pretrained("SOham01/results")
+    model.eval()  # Set model to evaluation mode
+    print("Tokenizer and model loaded successfully!")
+except Exception as e:
+    print(f"Error loading tokenizer or model: {e}")
+    raise e  # Stop execution if model/tokenizer fails to load
+
+# Function to generate predictions using the fine-tuned model
+def generate_prediction(text):
+    try:
+        # Tokenize the input text
+        inputs = tokenizer(f"Act as a financial expert. This is the financial statement report data extracted from a pdf. I want you understand this text data and give me the below points: 1. BUSINESS OVERVIEW 2. KEY FINDINGS, FINANCIAL DUE DILIGENCE 3. INCOME STATEMENT OVERVIEW 4. BALANCE SHEET OVERVIEW 5. ADJ EBITDA (IF DETAILED INFORMATION IS PROVIDED IN THE INPUT DOCUMENT ABOUT THIS THEN ANALYSE IT) 6. ADJ WORKING CAPITAL (IF DETAILED INFORMATION IS PROVIDED IN THE INPUT DOCUMENT ABOUT THIS THEN ANALYSE IT) I want the result in json format. : {text}", return_tensors="pt")
+
+        # Generate output
+        with torch.no_grad():
+            outputs = model.generate(**inputs)
+
+        # Decode the output
+        prediction = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return prediction
+    except Exception as e:
+        print(f"Error generating prediction: {e}")
+        return f"Prediction error: {e}"
+
+# Flask routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -32,103 +68,8 @@ def add_todo():
     todos.insert_one(todo)
     return jsonify({"status": "success"})
 
-# @app.route('/pdfextract/', methods=['POST'])
-# def pdfextract():
-#     if 'Files' not in request.files:
-#         return jsonify({"status": "error", "message": "No file uploaded"})
-
-#     file = request.files['Files']
-#     with pdfplumber.open(file.stream) as pdf:
-#         # Extract the text
-#         text = pdf.pages[35].extract_text()
-#         print(text)
-
-#         # Extract the data
-#         # print(pdf.pages,"====")
-#         # for pdf.pages
-#         tables = pdf.pages[35].extract_tables()
-#         print(tables ,"=====taBLE")
-
-#         print(pdf.pages[35].extract_tables())
-#         for table in tables:
-#             print(table,"=============tables")
-
-#         # Extract the images
-#         images = pdf.pages[35].images
-#         # print(images,"=============images")
-#         for image in images:
-#             print(image["page_number"],"=====000")
-#             try:
-#                 with open(f"image_{image['page_number']}.jpg", "wb") as f:
-#                     f.write(image["stream"].get_data())
-#             except Exception as e:
-#                 print(f"{image['page_number']} image has error")
-#     return jsonify({"status": "success"})
-
-# @app.route('/pdfextractllm/', methods=['POST'])
-# def pdfextractllm():
-#     if 'Files' not in request.files:
-#         return jsonify({"status": "error", "message": "No file uploaded"})
-#     file = request.files['Files']
-#     print(file)
-#     try:
-#         with pymupdf.open("/home/soham/Documents/YAAA/OverfittingExperts/backend/TIMPL-Annual-Report-2023-24.pdf") as doc:
-#             # for page in doc: print("page %i" % page.number)
-#             print(doc[8].find_tables())
-#             tabs = doc[8].find_tables()
-#             print(f"{len(tabs.tables)} found on {8}") # display number of found tables
-
-#             if tabs.tables:  # at least one table found?
-#                 print(tabs[0].extract())  # print content of first table
-#         # pdf = pymupdf4llm.to_markdown("/home/soham/Documents/YAAA/OverfittingExperts/backend/TIMPL-Annual-Report-2023-24.pdf")
-#         # print(pdf)
-#         return jsonify({"status": "succes"})
-#     except Exception as e:
-#         return jsonify({"status": "error", "message": str(e)})
-
-
-from transformers import T5Tokenizer, T5ForConditionalGeneration
-import torch
-from huggingface_hub import login
-
-# Define the upload folder
-UPLOAD_FOLDER = "uploads"
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
-
-# Log in using the token (ONLY for private models)
-access_token = "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"
-login(token=access_token)
-
-# Load the model from Hugging Face
-# Load model directly
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-
-tokenizer = AutoTokenizer.from_pretrained("SOham01/results")
-model = AutoModelForSeq2SeqLM.from_pretrained("SOham01/results")
-
-# Set model to evaluation mode
-model.eval()
-
-# Function to generate predictions using the fine-tuned model
-def generate_prediction(text):
-    # Tokenize the input text
-    inputs = tokenizer(f"summarize: {text}", return_tensors="pt", max_length=512, truncation=True)
-    
-    # Generate output
-    with torch.no_grad():
-        outputs = model.generate(**inputs)
-    
-    # Decode the output
-    prediction = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return prediction
-
-
-# API endpoint to upload and process PDF
 @app.route("/upload/", methods=["POST"])
 def upload_pdf():
-    print(request.files)
     if "Files" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -136,10 +77,12 @@ def upload_pdf():
         file = request.files["Files"]
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
-        print(file_path)
+        print(f"File saved at: {file_path}")
 
         # Convert PDF to images
         image_paths = pdf_to_images(file_path)
+        if not image_paths:
+            return jsonify({"error": "Failed to convert PDF to images"}), 500
 
         extracted_text = []
         for i, img_path in enumerate(image_paths):
@@ -155,8 +98,7 @@ def upload_pdf():
                     print(f"Error storing in ChromaDB: {str(e)}")
 
                 # Generate predictions using the fine-tuned model
-                prediction = generate_prediction(text)
-                extracted_text.append(f"Prediction for page {i}: {prediction}")
+
 
             except Exception as e:
                 print(f"Error extracting text from page {i}: {str(e)}")
@@ -167,8 +109,10 @@ def upload_pdf():
 
         # Join all extracted text and predictions into a single string
         result_text = "\n\n\n".join(extracted_text).replace("Ġ", "")
+        prediction = generate_prediction(result_text)
+        # extracted_text.append(f"Prediction for page {i}: {prediction}")
 
-        return jsonify({"message": "Extraction and prediction successful", "data": result_text})
+        return jsonify({"message": "Extraction and prediction successful", "data": prediction})
 
     except Exception as e:
         return jsonify({"error": f"Extraction failed: {str(e)}"}), 500
