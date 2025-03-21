@@ -1,6 +1,10 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-.env
 env
+
+/backend/venv
+/backend/data
+/backend/chroma_db
+/backend/temp_images
 # dependencies
 /frontend/node_modules
 /frontend/.pnp
@@ -41,3 +45,5 @@ env
 /frontend/*.tsbuildinfo
 /frontend/next-env.d.ts
 /backend/.env
+/frontend/package-lock.json
+
