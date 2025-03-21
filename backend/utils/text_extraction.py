@@ -1,7 +1,11 @@
+import os
+import torch
 from transformers import AutoProcessor, AutoModelForTokenClassification
 from PIL import Image
-import torch
 import pytesseract
+
+# Disable tokenizer parallelism warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Load pre-trained LayoutLMv3 model
 processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
@@ -15,8 +19,7 @@ def extract_data_from_image(image_path):
         encoding = processor(image, return_tensors="pt", truncation=True, max_length=512)
 
         # Remove offset_mapping if present
-        if 'offset_mapping' in encoding:
-            del encoding['offset_mapping']
+        encoding.pop('offset_mapping', None)
 
         # Ensure tensors are on the same device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,10 +36,7 @@ def extract_data_from_image(image_path):
         tokens = processor.tokenizer.convert_ids_to_tokens(encoding["input_ids"].squeeze().tolist())
 
         # Extract meaningful words (ignore special tokens)
-        extracted_text = []
-        for token, pred in zip(tokens, predictions):
-            if token not in ["[CLS]", "[SEP]", "[PAD]"]:
-                extracted_text.append(token)
+        extracted_text = [token for token, pred in zip(tokens, predictions) if token not in ["[CLS]", "[SEP]", "[PAD]"]]
 
         return " ".join(extracted_text)
 
