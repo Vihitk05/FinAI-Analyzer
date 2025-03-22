@@ -18,6 +18,7 @@ export default function ReportsPage() {
   const defaultReport = [
     {
       id: 1,
+      custom_id: "0000000000000000000",
       title: "Sample Financial Report",
       description: "Default report shown when API fails",
       company: "Example Corp",
@@ -33,7 +34,7 @@ export default function ReportsPage() {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const response = await fetch("http://127.0.0.1/all_reports");
+        const response = await fetch("http://127.0.0.1/fetch_all_data");
         const data = await response.json();
         setReports(data);
       } catch (error) {
@@ -152,7 +153,7 @@ export default function ReportsPage() {
                         <Download className="mr-2 h-4 w-4" />
                         Download
                       </Button>
-                      <a href={`/analysis/${report.id}`}>
+                      <a href={`/analysis/${report.custom_id}`}>
                         <Button
                           size="sm"
                           className="bg-blue-600 hover:bg-blue-700"

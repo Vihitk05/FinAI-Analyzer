@@ -28,7 +28,7 @@ export default function AnalysisPage({ params }) {
       try {
         setLoading(true);
         const response = await fetch(
-          `http://127.0.0.1:5000/get_details?id=${id}`,
+          `http://127.0.0.1:5000/fetch_data?custom_id=${id}`,
         );
 
         if (!response.ok) {
@@ -104,10 +104,10 @@ export default function AnalysisPage({ params }) {
       >
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl">
-            <a href="/" style={{ cursor: "pointer" }}>
+            <Link href="/" style={{ cursor: "pointer" }}>
               <span className="text-blue-500">Fin</span>
               <span>Analyzer</span>
-            </a>
+            </Link>
           </div>
           <nav className="flex items-center gap-6">
             <Link
