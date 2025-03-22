@@ -259,6 +259,7 @@ def upload_pdf():
         return jsonify({"error": f"Extraction failed: {str(e)}"}), 500
 
 @app.route("/fetch_data/", methods=["POST"])
+@cross_origin()
 def fetch_data():
     try:
         # Step 1: Get the custom_id from the request JSON payload
@@ -284,6 +285,7 @@ def fetch_data():
         return jsonify({"error": f"Failed to fetch data: {str(e)}"}), 500    
 
 @app.route("/fetch_all_data/", methods=["GET"])
+@cross_origin()
 def fetch_all_data():
     try:
         # Step 1: Query the database for all documents

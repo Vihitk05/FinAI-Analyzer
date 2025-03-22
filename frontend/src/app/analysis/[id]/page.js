@@ -28,13 +28,21 @@ export default function AnalysisPage({ params }) {
       try {
         setLoading(true);
         const response = await fetch(
-          `http://127.0.0.1:5000/fetch_data?custom_id=${id}`,
+          `http://127.0.0.1:5000/fetch_data`, // Endpoint URL
+          {
+            method: 'POST', // Change the method to POST
+            headers: {
+              
+              'Content-Type': 'application/json', // Set the content type to JSON
+            },
+            body: JSON.stringify({ custom_id: id }), // Include the custom_id in the request body
+          }
         );
-
+  
         if (!response.ok) {
           throw new Error(`Error: ${response.status}`);
         }
-
+  
         const data = await response.json();
         setCompanyData(data);
         setLoading(false);
@@ -44,7 +52,7 @@ export default function AnalysisPage({ params }) {
         setLoading(false);
       }
     };
-
+  
     if (id) {
       fetchCompanyData();
     }
