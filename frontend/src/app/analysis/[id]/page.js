@@ -1,10 +1,17 @@
 "use client"; // Add this directive to make it a Client Component
 
+import { useState, useEffect } from "react";
 import { ArrowLeft, Download, FileText } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation"; // Use next/navigation instead of next/router
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FinancialMetricsChart } from "@/components/financial-metrics-chart";
 import { FinancialRatiosTable } from "@/components/financial-ratios-table";
@@ -12,137 +19,306 @@ import { FinancialRatiosTable } from "@/components/financial-ratios-table";
 export default function AnalysisPage({ params }) {
   const router = useRouter(); // Access the router
   const { id } = params; // Access the dynamic route parameter `id`
-    console.log(id);
+  const [loading, setLoading] = useState(true);
+  const [companyData, setCompanyData] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchCompanyData = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `http://127.0.0.1:5000/get_details?id=${id}`,
+        );
+
+        if (!response.ok) {
+          throw new Error(`Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setCompanyData(data);
+        setLoading(false);
+      } catch (err) {
+        console.error("Failed to fetch company data:", err);
+        setError(err.message);
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchCompanyData();
+    }
+  }, [id]);
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mx-auto"></div>
+          <p className="mt-4 text-lg text-blue-900">Loading analysis data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle className="text-red-600">Error Loading Data</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{error}</p>
+            <Button
+              className="mt-4 bg-blue-500 hover:bg-blue-600"
+              onClick={() => router.push("/dashboard")}
+            >
+              Return to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Format currency (in thousands)
+  const formatCurrency = (value) => {
+    if (!value) return "$0";
+    return `$${(value / 1000).toFixed(1)}K`;
+  };
+
+  // Format percentage
+  const formatPercentage = (value) => {
+    if (value === undefined || value === null) return "0%";
+    return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+  };
+
   return (
-    <div className="flex min-h-screen flex-col" >
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur" style={{"display":"flex","justifyContent":"center"}}>
+    <div className="flex min-h-screen flex-col">
+      <header
+        className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur"
+        style={{ display: "flex", justifyContent: "center" }}
+      >
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl">
-          <a href="/" style={{"cursor":"pointer"}}>
-            <span className="text-primary">Fin</span>
-            <span>Analyzer</span>
+            <a href="/" style={{ cursor: "pointer" }}>
+              <span className="text-blue-500">Fin</span>
+              <span>Analyzer</span>
             </a>
           </div>
           <nav className="flex items-center gap-6">
-            <Link href="/dashboard" className="text-sm font-medium text-muted-foreground">
+            <Link
+              href="/dashboard"
+              className="text-sm font-medium text-muted-foreground hover:text-blue-500"
+            >
               Dashboard
             </Link>
-            <Link href="/reports" className="text-sm font-medium text-muted-foreground">
+            <Link
+              href="/reports"
+              className="text-sm font-medium text-muted-foreground hover:text-blue-500"
+            >
               Reports
             </Link>
-            <Link href="/settings" className="text-sm font-medium text-muted-foreground">
+            <Link
+              href="/settings"
+              className="text-sm font-medium text-muted-foreground hover:text-blue-500"
+            >
               Settings
             </Link>
-            <Button size="sm" variant="outline">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-blue-500 border-blue-500 hover:bg-blue-50"
+            >
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
           </nav>
         </div>
       </header>
-      <main className="flex py-8"  style={{"flexDirection":"column","alignItems":"center"}}>
+      <main
+        className="flex py-8"
+        style={{ flexDirection: "column", alignItems: "center" }}
+      >
         <div className="container">
           <div className="mb-8">
             <Link
               href="/dashboard"
-              className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4"
+              className="inline-flex items-center text-sm text-blue-500 hover:text-blue-700 mb-4"
             >
               <ArrowLeft className="mr-1 h-4 w-4" />
               Back to Dashboard
             </Link>
             <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-bold">Amazon Financial Analysis</h1>
-              <Button>
+              <h1 className="text-3xl font-bold text-blue-900">
+                Sony Financial Analysis
+              </h1>
+              <Button className="bg-blue-500 hover:bg-blue-600">
                 <FileText className="mr-2 h-4 w-4" />
                 Generate Full Report
               </Button>
             </div>
-            <p className="text-muted-foreground mt-2">Analysis completed on March 15, 2023</p>
+            <p className="text-muted-foreground mt-2">
+              Analysis completed on March 15, 2023
+            </p>
           </div>
 
           <Tabs defaultValue="summary" className="mb-8">
             <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="summary">Summary</TabsTrigger>
-              <TabsTrigger value="business">Business Overview</TabsTrigger>
-              <TabsTrigger value="income">Income Statement</TabsTrigger>
-              <TabsTrigger value="balance">Balance Sheet</TabsTrigger>
-              <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
+              <TabsTrigger
+                value="summary"
+                className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+              >
+                Summary
+              </TabsTrigger>
+              <TabsTrigger
+                value="business"
+                className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+              >
+                Business Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="income"
+                className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+              >
+                Income Statement
+              </TabsTrigger>
+              <TabsTrigger
+                value="balance"
+                className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+              >
+                Balance Sheet
+              </TabsTrigger>
+              <TabsTrigger
+                value="cashflow"
+                className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+              >
+                Cash Flow
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="summary">
               <div className="grid gap-6 md:grid-cols-2">
-                <Card>
+                <Card className="border-blue-100">
                   <CardHeader>
-                    <CardTitle>Key Financial Metrics</CardTitle>
-                    <CardDescription>Performance overview for the fiscal year</CardDescription>
+                    <CardTitle className="text-blue-900">
+                      Key Financial Metrics
+                    </CardTitle>
+                    <CardDescription>
+                      Performance overview for the fiscal year
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <p className="text-sm text-muted-foreground">Revenue</p>
-                          <p className="text-2xl font-bold">$514.2B</p>
-                          <p className="text-xs text-green-500">+14.2% YoY</p>
+                          <p className="text-sm text-muted-foreground">
+                            Revenue
+                          </p>
+                          <p className="text-2xl font-bold text-blue-900">
+                            {formatCurrency(companyData?.revenue)}
+                          </p>
+                          <p className="text-xs text-blue-500">
+                            {formatPercentage(companyData?.revenueGrowth)} YoY
+                          </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">EBITDA</p>
-                          <p className="text-2xl font-bold">$98.7B</p>
-                          <p className="text-xs text-green-500">+8.7% YoY</p>
+                          <p className="text-sm text-muted-foreground">
+                            EBITDA
+                          </p>
+                          <p className="text-2xl font-bold text-blue-900">
+                            {formatCurrency(companyData?.ebitda)}
+                          </p>
+                          <p className="text-xs text-blue-500">
+                            {formatPercentage(companyData?.ebitdaGrowth)} YoY
+                          </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Net Income</p>
-                          <p className="text-2xl font-bold">$30.4B</p>
-                          <p className="text-xs text-green-500">+12.3% YoY</p>
+                          <p className="text-sm text-muted-foreground">
+                            Net Income
+                          </p>
+                          <p className="text-2xl font-bold text-blue-900">
+                            {formatCurrency(companyData?.netIncome)}
+                          </p>
+                          <p className="text-xs text-blue-500">
+                            {formatPercentage(companyData?.netIncomeGrowth)} YoY
+                          </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Free Cash Flow</p>
-                          <p className="text-2xl font-bold">$25.9B</p>
-                          <p className="text-xs text-green-500">+5.8% YoY</p>
+                          <p className="text-sm text-muted-foreground">
+                            Free Cash Flow
+                          </p>
+                          <p className="text-2xl font-bold text-blue-900">
+                            {formatCurrency(companyData?.freeCashFlow)}
+                          </p>
+                          <p className="text-xs text-blue-500">
+                            {formatPercentage(companyData?.freeCashFlowGrowth)}{" "}
+                            YoY
+                          </p>
                         </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="border-blue-100">
                   <CardHeader>
-                    <CardTitle>Financial Health Assessment</CardTitle>
-                    <CardDescription>Overall financial health and risk analysis</CardDescription>
+                    <CardTitle className="text-blue-900">
+                      Financial Health Assessment
+                    </CardTitle>
+                    <CardDescription>
+                      Overall financial health and risk analysis
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium">Overall Financial Health</span>
-                          <span className="text-sm font-medium">Strong</span>
+                          <span className="text-sm font-medium">
+                            Overall Financial Health
+                          </span>
+                          <span className="text-sm font-medium">
+                            {companyData?.overallFinancialHealth || "N/A"}
+                          </span>
                         </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 w-[85%]"></div>
+                        <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 w-[75%]"></div>
                         </div>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-medium">Liquidity</span>
-                          <span className="text-sm font-medium">Excellent</span>
+                          <span className="text-sm font-medium">
+                            {companyData?.liquidity || "N/A"}
+                          </span>
                         </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 w-[90%]"></div>
+                        <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 w-[60%]"></div>
                         </div>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-medium">Solvency</span>
-                          <span className="text-sm font-medium">Good</span>
+                          <span className="text-sm font-medium">
+                            {companyData?.solvency || "N/A"}
+                          </span>
                         </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 w-[75%]"></div>
+                        <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 w-[65%]"></div>
                         </div>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium">Profitability</span>
-                          <span className="text-sm font-medium">Good</span>
+                          <span className="text-sm font-medium">
+                            Profitability
+                          </span>
+                          <span className="text-sm font-medium">
+                            {companyData?.profitability || "N/A"}
+                          </span>
                         </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 w-[80%]"></div>
+                        <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 w-[75%]"></div>
                         </div>
                       </div>
                     </div>
@@ -151,70 +327,225 @@ export default function AnalysisPage({ params }) {
               </div>
             </TabsContent>
             <TabsContent value="business">
-              <Card>
+              <Card className="border-blue-100">
                 <CardHeader>
-                  <CardTitle>Business Overview</CardTitle>
-                  <CardDescription>AI-generated summary of business performance and outlook</CardDescription>
+                  <CardTitle className="text-blue-900">
+                    Business Overview
+                  </CardTitle>
+                  <CardDescription>
+                    AI-generated summary of business performance and outlook
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
                     <div>
-                      <h3 className="text-lg font-medium mb-2">Company Profile</h3>
+                      <h3 className="text-lg font-medium mb-2 text-blue-900">
+                        Company Profile
+                      </h3>
                       <p className="text-sm text-muted-foreground">
-                        Amazon.com, Inc. is an American multinational technology company focusing on e-commerce, cloud
-                        computing, digital streaming, and artificial intelligence. It has been referred to as "one of
-                        the most influential economic and cultural forces in the world" and is one of the world's most
-                        valuable brands.
+                        {companyData?.companyProfile ||
+                          "Company profile not available."}
                       </p>
                     </div>
                     <div>
-                      <h3 className="text-lg font-medium mb-2">Key Findings</h3>
+                      <h3 className="text-lg font-medium mb-2 text-blue-900">
+                        Key Findings
+                      </h3>
                       <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-2">
-                        <li>
-                          <strong>Strong Revenue Growth:</strong> Amazon continues to demonstrate robust revenue growth
-                          across all major business segments, with AWS showing particularly strong performance at 29%
-                          YoY growth.
-                        </li>
-                        <li>
-                          <strong>Improving Operating Margins:</strong> Operating margins have improved to 6.1%, up from
-                          5.3% in the previous year, indicating enhanced operational efficiency.
-                        </li>
-                        <li>
-                          <strong>Significant R&D Investment:</strong> The company maintains substantial investment in
-                          research and development, representing 12.7% of total revenue, focused on AI, robotics, and
-                          logistics optimization.
-                        </li>
-                        <li>
-                          <strong>Strong Cash Position:</strong> Amazon maintains a healthy cash position with $76.2B in
-                          cash and short-term investments, providing significant flexibility for strategic initiatives.
-                        </li>
+                        {companyData?.keyFindings?.map((finding, index) => (
+                          <li key={index}>
+                            <strong className="text-blue-700">
+                              {finding.split(":")[0]}:
+                            </strong>
+                            {finding.includes(":")
+                              ? finding.split(":")[1]
+                              : finding}
+                          </li>
+                        )) || <li>No key findings available.</li>}
                       </ul>
                     </div>
                     <div>
-                      <h3 className="text-lg font-medium mb-2">Financial Due Diligence</h3>
+                      <h3 className="text-lg font-medium mb-2 text-blue-900">
+                        Financial Due Diligence
+                      </h3>
                       <p className="text-sm text-muted-foreground mb-2">
-                        Our financial due diligence reveals a company with strong fundamentals and well-positioned for
-                        continued growth. Key areas of strength and potential concern include:
+                        Our financial due diligence reveals a company with
+                        distinct strengths and areas of concern. Key areas
+                        include:
                       </p>
                       <div className="grid gap-4 md:grid-cols-2">
                         <div>
-                          <h4 className="text-sm font-medium mb-1">Strengths</h4>
+                          <h4 className="text-sm font-medium mb-1 text-blue-700">
+                            Strengths
+                          </h4>
                           <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-                            <li>Diversified revenue streams across retail, cloud, and digital services</li>
-                            <li>Strong cash flow generation and liquidity position</li>
-                            <li>Continued market share gains in e-commerce and cloud computing</li>
-                            <li>Robust logistics infrastructure providing competitive advantage</li>
+                            {companyData?.strengths?.map((strength, index) => (
+                              <li key={index}>{strength}</li>
+                            )) || <li>No strengths data available.</li>}
                           </ul>
                         </div>
                         <div>
-                          <h4 className="text-sm font-medium mb-1">Areas of Concern</h4>
+                          <h4 className="text-sm font-medium mb-1 text-blue-700">
+                            Areas of Concern
+                          </h4>
                           <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-                            <li>Increasing competitive pressure in cloud services</li>
-                            <li>Regulatory scrutiny and potential antitrust concerns</li>
-                            <li>Rising labor costs and unionization efforts</li>
-                            <li>Significant capital expenditure requirements</li>
+                            {companyData?.areasOfConcern?.map(
+                              (concern, index) => (
+                                <li key={index}>{concern}</li>
+                              ),
+                            ) || <li>No concerns data available.</li>}
                           </ul>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="income">
+              <Card className="border-blue-100">
+                <CardHeader>
+                  <CardTitle className="text-blue-900">
+                    Income Statement Breakdown
+                  </CardTitle>
+                  <CardDescription>
+                    Revenue and expense allocation by category
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-medium mb-2 text-blue-900">
+                        Revenue Breakdown
+                      </h3>
+                      <div className="grid gap-4 grid-cols-2">
+                        {companyData?.incomeStatementRevenueBreakdown?.map(
+                          (item, index) => (
+                            <div key={index}>
+                              <p className="text-sm text-muted-foreground">
+                                {item.category}
+                              </p>
+                              <p className="text-xl font-bold text-blue-900">
+                                {formatCurrency(item.amount)}
+                              </p>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium mb-2 text-blue-900">
+                        Expense Allocation
+                      </h3>
+                      <div className="grid gap-4 grid-cols-2">
+                        {companyData?.incomeStatementExpenseAllocation?.map(
+                          (item, index) => (
+                            <div key={index}>
+                              <p className="text-sm text-muted-foreground">
+                                {item.category}
+                              </p>
+                              <p className="text-xl font-bold text-blue-900">
+                                {formatCurrency(item.amount)}
+                              </p>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="balance">
+              <Card className="border-blue-100">
+                <CardHeader>
+                  <CardTitle className="text-blue-900">
+                    Balance Sheet Overview
+                  </CardTitle>
+                  <CardDescription>
+                    Assets and liabilities composition
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-medium mb-2 text-blue-900">
+                        Assets Composition
+                      </h3>
+                      <div className="grid gap-4 grid-cols-2">
+                        {companyData?.balanceSheetAssetsComposition?.map(
+                          (item, index) => (
+                            <div key={index}>
+                              <p className="text-sm text-muted-foreground">
+                                {item.category}
+                              </p>
+                              <p className="text-xl font-bold text-blue-900">
+                                {formatCurrency(item.amount)}
+                              </p>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium mb-2 text-blue-900">
+                        Liabilities & Equity
+                      </h3>
+                      <div className="grid gap-4 grid-cols-2">
+                        {companyData?.balanceSheetLiabilitiesEquity?.map(
+                          (item, index) => (
+                            <div key={index}>
+                              <p className="text-sm text-muted-foreground">
+                                {item.category}
+                              </p>
+                              <p className="text-xl font-bold text-blue-900">
+                                {formatCurrency(item.amount)}
+                              </p>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="cashflow">
+              <Card className="border-blue-100">
+                <CardHeader>
+                  <CardTitle className="text-blue-900">
+                    Cash Flow Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    Operating, investing and financing activities
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="grid gap-4 grid-cols-3">
+                      <div>
+                        <h3 className="text-lg font-medium mb-2 text-blue-900">
+                          Operating Activities
+                        </h3>
+                        <p className="text-2xl font-bold text-blue-900">
+                          {formatCurrency(companyData?.cashFlowOperations)}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-medium mb-2 text-blue-900">
+                          Investing Activities
+                        </h3>
+                        <p className="text-2xl font-bold text-blue-900">
+                          {formatCurrency(companyData?.cashFlowInvesting)}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-medium mb-2 text-blue-900">
+                          Financing Activities
+                        </h3>
+                        <p className="text-2xl font-bold text-blue-900">
+                          {formatCurrency(companyData?.cashFlowFinancing)}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -224,49 +555,69 @@ export default function AnalysisPage({ params }) {
           </Tabs>
 
           <div className="grid gap-6 md:grid-cols-2 mb-8">
-            <Card className="md:col-span-2">
+            <Card className="md:col-span-2 border-blue-100">
               <CardHeader>
-                <CardTitle>Financial Performance Trends</CardTitle>
-                <CardDescription>Key financial metrics over the last 3 years</CardDescription>
+                <CardTitle className="text-blue-900">
+                  Financial Performance Trends
+                </CardTitle>
+                <CardDescription>
+                  Key financial metrics over the last years
+                </CardDescription>
               </CardHeader>
               <CardContent className="h-[350px]">
-                <FinancialMetricsChart />
+                <FinancialMetricsChart
+                  data={companyData?.financialMetricsChartData}
+                />
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-blue-100">
               <CardHeader>
-                <CardTitle>Key Financial Ratios</CardTitle>
-                <CardDescription>Profitability, liquidity, and solvency metrics</CardDescription>
+                <CardTitle className="text-blue-900">
+                  Key Financial Ratios
+                </CardTitle>
+                <CardDescription>
+                  Profitability, liquidity, and solvency metrics
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <FinancialRatiosTable />
+                <FinancialRatiosTable data={companyData?.financialRatios} />
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-blue-100">
               <CardHeader>
-                <CardTitle>AI-Generated Insights</CardTitle>
-                <CardDescription>Key observations and recommendations</CardDescription>
+                <CardTitle className="text-blue-900">
+                  AI-Generated Insights
+                </CardTitle>
+                <CardDescription>
+                  Key observations and recommendations
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm font-medium mb-1">Key Observations</h3>
+                    <h3 className="text-sm font-medium mb-1 text-blue-700">
+                      Key Observations
+                    </h3>
                     <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-                      <li>Strong revenue growth across all business segments</li>
-                      <li>Improving operating margins indicate enhanced efficiency</li>
-                      <li>AWS continues to be the primary profit driver</li>
-                      <li>International segment showing improved profitability</li>
+                      {companyData?.keyObservations?.map(
+                        (observation, index) => (
+                          <li key={index}>{observation}</li>
+                        ),
+                      ) || <li>No observations available.</li>}
                     </ul>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium mb-1">Recommendations</h3>
+                    <h3 className="text-sm font-medium mb-1 text-blue-700">
+                      Recommendations
+                    </h3>
                     <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-                      <li>Continue investment in high-growth segments like AWS and advertising</li>
-                      <li>Monitor and optimize logistics costs to further improve margins</li>
-                      <li>Consider strategic acquisitions in emerging technologies</li>
-                      <li>Develop strategies to address regulatory challenges</li>
+                      {companyData?.recommendations?.map(
+                        (recommendation, index) => (
+                          <li key={index}>{recommendation}</li>
+                        ),
+                      ) || <li>No recommendations available.</li>}
                     </ul>
                   </div>
                 </div>
@@ -274,28 +625,17 @@ export default function AnalysisPage({ params }) {
             </Card>
           </div>
 
-          <Card>
+          <Card className="border-blue-100">
             <CardHeader>
-              <CardTitle>Executive Summary</CardTitle>
-              <CardDescription>Comprehensive analysis and key takeaways</CardDescription>
+              <CardTitle className="text-blue-900">Executive Summary</CardTitle>
+              <CardDescription>
+                Comprehensive analysis and key takeaways
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Amazon continues to demonstrate strong financial performance with robust revenue growth and improving
-                profitability metrics. The company's diversified business model, spanning e-commerce, cloud computing,
-                digital advertising, and subscription services, provides multiple growth vectors and resilience against
-                market fluctuations.
-              </p>
-              <p className="text-sm text-muted-foreground mb-4">
-                AWS remains the primary profit driver, contributing approximately 74% of operating income despite
-                representing only 16% of total revenue. The North American retail segment has shown significant margin
-                improvement, while the International segment continues to progress toward profitability.
-              </p>
               <p className="text-sm text-muted-foreground">
-                The company maintains a strong balance sheet with substantial cash reserves and manageable debt levels.
-                Capital expenditures remain elevated as Amazon continues to invest in logistics infrastructure, data
-                centers, and technology development. These investments position the company well for sustained long-term
-                growth, though they may pressure near-term free cash flow.
+                {companyData?.executiveSummary ||
+                  "Executive summary not available."}
               </p>
             </CardContent>
           </Card>

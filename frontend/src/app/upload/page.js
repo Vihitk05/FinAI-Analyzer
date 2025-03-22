@@ -15,6 +15,7 @@ import { useState } from "react";
 export default function UploadPage() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [urlValue, setUrlValue] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleFileChange = (event) => {
     setSelectedFile(event.target.files[0]);
@@ -26,13 +27,20 @@ export default function UploadPage() {
       return;
     }
 
+    setIsUploading(true);
+
     const formData = new FormData();
     formData.append("file", selectedFile);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/upload", {
+      const response = await fetch("http://127.0.0.1:5000/upload", {
         method: "POST",
         body: formData,
+        // Removed mode: "cors" and credentials: "include" as they can cause issues
+        // The server should handle CORS properly on its end
+        headers: {
+          // Removed "Access-Control-Allow-Origin" as this is a response header, not a request header
+        },
       });
 
       if (!response.ok) {
@@ -42,9 +50,12 @@ export default function UploadPage() {
       const data = await response.json();
       console.log("Upload successful:", data);
       alert("File uploaded successfully!");
+      setSelectedFile(null); // Reset selected file after successful upload
     } catch (error) {
       console.error("Upload failed:", error);
       alert("Upload failed: " + error.message);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -54,12 +65,16 @@ export default function UploadPage() {
       return;
     }
 
+    setIsUploading(true);
+
     try {
       const response = await fetch("http://127.0.0.1:8000/upload-url", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // Removed "Access-Control-Allow-Origin" as this is a response header, not a request header
         },
+        // Removed mode: "cors" and credentials: "include" as they can cause issues
         body: JSON.stringify({ url: urlValue }),
       });
 
@@ -70,9 +85,12 @@ export default function UploadPage() {
       const data = await response.json();
       console.log("URL upload successful:", data);
       alert("URL processed successfully!");
+      setUrlValue(""); // Reset URL input after successful upload
     } catch (error) {
       console.error("URL upload failed:", error);
       alert("URL upload failed: " + error.message);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -181,12 +199,20 @@ export default function UploadPage() {
                       Select Files
                     </Button>
                     {selectedFile && (
-                      <Button
-                        className="bg-blue-600 hover:bg-blue-700 ml-4"
-                        onClick={handleFileUpload}
-                      >
-                        Upload Selected File
-                      </Button>
+                      <div className="mt-4">
+                        <p className="text-sm text-blue-700 mb-2">
+                          Selected: {selectedFile.name}
+                        </p>
+                        <Button
+                          className="bg-blue-600 hover:bg-blue-700"
+                          onClick={handleFileUpload}
+                          disabled={isUploading}
+                        >
+                          {isUploading
+                            ? "Uploading..."
+                            : "Upload Selected File"}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </CardContent>
@@ -222,8 +248,9 @@ export default function UploadPage() {
                     <Button
                       className="bg-blue-600 hover:bg-blue-700"
                       onClick={handleUrlUpload}
+                      disabled={isUploading}
                     >
-                      Import Document
+                      {isUploading ? "Processing..." : "Import Document"}
                     </Button>
                   </div>
                 </CardContent>

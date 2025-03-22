@@ -6,11 +6,13 @@ import os
 from mistralai import Mistral
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from flask_cors import CORS, cross_origin
 import json  # For parsing JSON strings
 import re  # For extracting JSON from text
 
 # Initialize Flask app
 app = Flask(__name__)
+CORS(app)
 
 # Define upload folder
 UPLOAD_FOLDER = "data"
@@ -166,12 +168,14 @@ def extract_json_from_text(text):
 
 
 @app.route("/upload/", methods=["POST"])
+@cross_origin()
 def upload_pdf():
-    if "Files" not in request.files:
+    # print(request.files)
+    if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
     try:
-        file = request.files["Files"]
+        file = request.files["file"]
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
         print(f"File saved at: {file_path}")

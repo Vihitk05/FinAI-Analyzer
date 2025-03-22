@@ -1,3 +1,5 @@
+"use client";
+
 import { Download, FileText, Filter, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +12,39 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReportSummary } from "@/components/report-summary";
+import { useEffect, useState } from "react";
 
 export default function ReportsPage() {
+  const defaultReport = [
+    {
+      id: 1,
+      title: "Sample Financial Report",
+      description: "Default report shown when API fails",
+      company: "Example Corp",
+      date: "2023-01-01",
+      revenue: 1000000,
+      ebitda: 200000,
+      netIncome: 150000,
+    },
+  ];
+
+  const [reports, setReports] = useState([]);
+
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const response = await fetch("http://127.0.0.1/all_reports");
+        const data = await response.json();
+        setReports(data);
+      } catch (error) {
+        console.error("Error fetching reports:", error);
+        setReports(defaultReport);
+      }
+    };
+
+    fetchReports();
+  }, []);
+
   return (
     <div className="flex min-h-screen flex-col bg-blue-50">
       <header
@@ -90,181 +123,47 @@ export default function ReportsPage() {
               >
                 All Reports
               </TabsTrigger>
-              <TabsTrigger
-                value="income"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
-              >
-                Income Statement
-              </TabsTrigger>
-              <TabsTrigger
-                value="balance"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
-              >
-                Balance Sheet
-              </TabsTrigger>
-              <TabsTrigger
-                value="cashflow"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
-              >
-                Cash Flow
-              </TabsTrigger>
-              <TabsTrigger
-                value="custom"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
-              >
-                Custom Reports
-              </TabsTrigger>
             </TabsList>
             <TabsContent value="all" className="space-y-6">
-              <Card className="border-blue-200">
-                <CardHeader>
-                  <CardTitle className="text-blue-900">
-                    Amazon Financial Analysis
-                  </CardTitle>
-                  <CardDescription className="text-blue-600">
-                    Comprehensive analysis of Amazon's 2023 financial statements
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ReportSummary
-                    company="Amazon"
-                    date="March 15, 2023"
-                    revenue="$514.2B"
-                    ebitda="$98.7B"
-                    netIncome="$30.4B"
-                  />
-                  <div className="flex justify-end mt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mr-2 border-blue-600 text-blue-600 hover:bg-blue-100"
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download
-                    </Button>
-                    <a href="/analysis/1">
+              {reports.map((report, index) => (
+                <Card key={index} className="border-blue-200">
+                  <CardHeader>
+                    <CardTitle className="text-blue-900">
+                      {report.title}
+                    </CardTitle>
+                    <CardDescription className="text-blue-600">
+                      {report.description}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ReportSummary
+                      company={report.company}
+                      date={report.date}
+                      revenue={report.revenue}
+                      ebitda={report.ebitda}
+                      netIncome={report.netIncome}
+                    />
+                    <div className="flex justify-end mt-4">
                       <Button
+                        variant="outline"
                         size="sm"
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="mr-2 border-blue-600 text-blue-600 hover:bg-blue-100"
                       >
-                        View Full Report
+                        <Download className="mr-2 h-4 w-4" />
+                        Download
                       </Button>
-                    </a>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-blue-200">
-                <CardHeader>
-                  <CardTitle className="text-blue-900">
-                    Tesla Q2 Financial Analysis
-                  </CardTitle>
-                  <CardDescription className="text-blue-600">
-                    Quarterly financial performance analysis for Tesla
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ReportSummary
-                    company="Tesla"
-                    date="July 22, 2023"
-                    revenue="$24.9B"
-                    ebitda="$4.5B"
-                    netIncome="$2.7B"
-                  />
-                  <div className="flex justify-end mt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mr-2 border-blue-600 text-blue-600 hover:bg-blue-100"
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download
-                    </Button>
-                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                      View Full Report
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-blue-200">
-                <CardHeader>
-                  <CardTitle className="text-blue-900">
-                    Microsoft Annual Report Analysis
-                  </CardTitle>
-                  <CardDescription className="text-blue-600">
-                    Comprehensive analysis of Microsoft's annual financial
-                    statements
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ReportSummary
-                    company="Microsoft"
-                    date="October 10, 2023"
-                    revenue="$211.9B"
-                    ebitda="$99.3B"
-                    netIncome="$72.4B"
-                  />
-                  <div className="flex justify-end mt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mr-2 border-blue-600 text-blue-600 hover:bg-blue-100"
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download
-                    </Button>
-                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                      View Full Report
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="income">
-              <div className="grid gap-6 md:grid-cols-2">
-                <Card className="border-blue-200">
-                  <CardHeader>
-                    <CardTitle className="text-blue-900">
-                      Revenue Analysis Report
-                    </CardTitle>
-                    <CardDescription className="text-blue-600">
-                      Detailed breakdown of revenue streams and growth trends
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-blue-600 mb-4">
-                      This report provides a comprehensive analysis of revenue
-                      sources, growth patterns, and market segment performance.
-                    </p>
-                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                      View Report
-                    </Button>
+                      <a href={`/analysis/${report.id}`}>
+                        <Button
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          View Full Report
+                        </Button>
+                      </a>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card className="border-blue-200">
-                  <CardHeader>
-                    <CardTitle className="text-blue-900">
-                      Expense Analysis Report
-                    </CardTitle>
-                    <CardDescription className="text-blue-600">
-                      Detailed breakdown of expense categories and optimization
-                      opportunities
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-blue-600 mb-4">
-                      This report analyzes expense patterns, identifies cost
-                      drivers, and provides recommendations for expense
-                      optimization.
-                    </p>
-                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                      View Report
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
+              ))}
             </TabsContent>
           </Tabs>
         </div>
