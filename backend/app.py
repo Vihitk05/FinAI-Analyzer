@@ -167,6 +167,10 @@ def extract_json_from_text(text):
     return None
 
 
+from bson import json_util
+from bson.objectid import ObjectId
+import json
+
 @app.route("/upload/", methods=["POST"])
 @cross_origin()
 def upload_pdf():
@@ -237,10 +241,14 @@ def upload_pdf():
         # Step 10: Add the custom ID to the prediction data
         prediction_data["custom_id"] = custom_id
         prediction_data["analysis_date"] = datetime.datetime.now()
+
         # Step 11: Store the prediction data in MongoDB
         result = financial_data.insert_one(prediction_data)
 
-        # Step 12: Return the response with the custom ID
+        # Step 12: Convert ObjectId to string for JSON serialization
+        prediction_data["_id"] = str(result.inserted_id)
+
+        # Step 13: Return the response with the custom ID
         return jsonify({
             "message": "Extraction and prediction successful",
             "data": prediction_data,
