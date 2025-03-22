@@ -6,6 +6,7 @@ from utils.text_extraction import extract_data_from_image
 from utils.vector_storage import store_in_chromadb
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
+import re
 from huggingface_hub import login
 from concurrent.futures import ThreadPoolExecutor, as_completed
 # Initialize Flask app
@@ -40,57 +41,74 @@ except Exception as e:
 if torch.cuda.is_available():
     model.half().to("cuda")
 
-def process_chunk(chunk):
-    """Process a single chunk of text."""
-    inputs = tokenizer(chunk, return_tensors="pt", truncation=True, max_length=1024)
-    if torch.cuda.is_available():
-        inputs = {k: v.to("cuda") for k, v in inputs.items()}
+def clean_text(text):
+    """Clean extracted text by removing extra spaces and line breaks."""
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_length=512,
-            num_beams=2,
-            no_repeat_ngram_size=2,
-            early_stopping=True
-        )
+def split_text(text, chunk_size=10000):
+    """Split text into smaller chunks."""
+    return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
 
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-def generate_prediction(text):
+def generate_prediction(chunk):
+    """Generate predictions for a text chunk using the fine-tuned model."""
     try:
-        # Define the prompt
         prompt = (
             "Act as a financial expert. This is the financial statement report data extracted from a pdf. "
-            "I want you to understand this text data and provide the following points in JSON format:\n"
-            "1. BUSINESS OVERVIEW\n"
-            "2. KEY FINDINGS, FINANCIAL DUE DILIGENCE\n"
-            "3. INCOME STATEMENT OVERVIEW\n"
-            "4. BALANCE SHEET OVERVIEW\n"
-            "5. ADJ EBITDA (if detailed information is provided in the input document, analyze it)\n"
-            "6. ADJ WORKING CAPITAL (if detailed information is provided in the input document, analyze it)\n"
-            f"Text: {text}"
+            "I want you to understand this text data and provide the following points in JSON format. "
+            "For each point, provide at least 1000 characters of detailed analysis:\n"
+            "1. BUSINESS OVERVIEW - Provide extensive details about the company's operations, market position, key products/services, competitive advantages, and business model\n"
+            "2. KEY FINDINGS, FINANCIAL DUE DILIGENCE - In-depth analysis of major financial findings, risks, opportunities, and recommendations\n"
+            "3. INCOME STATEMENT OVERVIEW - Detailed analysis of revenue streams, cost structures, profitability trends, and key performance indicators\n"
+            "4. BALANCE SHEET OVERVIEW - Comprehensive review of assets, liabilities, equity positions, and financial health metrics\n"
+            "5. ADJ EBITDA - Full analysis of EBITDA adjustments, normalization entries, and impact on valuation\n"
+            "6. ADJ WORKING CAPITAL - Complete examination of working capital components, adjustments, and operational implications\n"
+            f"Text: {chunk}"
         )
 
-        # Split the prompt and text into smaller chunks
-        max_chunk_length = 2048  # Increase chunk size to reduce the number of chunks
-        text_chunks = [prompt[i:i + max_chunk_length] for i in range(0, len(prompt), max_chunk_length)]
+        # Tokenize and generate predictions
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096)
+        if torch.cuda.is_available():
+            inputs = {k: v.to("cuda") for k, v in inputs.items()}
 
-        # Process chunks in parallel using ThreadPoolExecutor
-        predictions = []
-        with ThreadPoolExecutor(max_workers=4) as executor:  # Adjust max_workers based on your CPU/GPU
-            futures = [executor.submit(process_chunk, chunk) for chunk in text_chunks]
-            for future in as_completed(futures):
-                predictions.append(future.result())
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                num_beams=4,
+                no_repeat_ngram_size=3,
+                early_stopping=True,
+                do_sample=True,
+                top_k=50,
+                top_p=0.95,
+                temperature=0.7,
+                max_length=4096,
+                min_length=1000
+            )
 
-        # Combine all predictions into a single JSON response
-        combined_prediction = " ".join(predictions)
-        return combined_prediction
+        return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
     except Exception as e:
         print(f"Error generating prediction: {e}")
         return f"Prediction error: {e}"
-# Flask routes
+
+def process_large_text(text):
+    """Process large text by splitting it into chunks and generating predictions."""
+    # Clean the text
+    text = clean_text(text)
+
+    # Split the text into chunks
+    chunks = split_text(text)
+
+    # Process each chunk
+    results = []
+    for chunk in chunks:
+        prediction = generate_prediction(chunk)
+        results.append(prediction)
+
+    # Combine results
+    return " ".join(results)
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -130,10 +148,10 @@ def upload_pdf():
                 extracted_text.append(text)
 
                 # Store the extracted text in ChromaDB
-                try:
-                    store_in_chromadb(text, f"{file.filename}_page_{i}")
-                except Exception as e:
-                    print(f"Error storing in ChromaDB: {str(e)}")
+                # try:
+                #     store_in_chromadb(text, f"{file.filename}_page_{i}")
+                # except Exception as e:
+                #     print(f"Error storing in ChromaDB: {str(e)}")
 
                 # Generate predictions using the fine-tuned model
 
@@ -146,8 +164,8 @@ def upload_pdf():
             return jsonify({"error": "Failed to extract any text"}), 500
 
         # Join all extracted text and predictions into a single string
-        result_text = "\n\n\n".join(extracted_text).replace("Ġ", "")
-        prediction = generate_prediction(result_text)
+        extracted_text = "\n\n\n".join(extracted_text).replace("Ġ", "")
+        prediction = process_large_text(extracted_text)
         # extracted_text.append(f"Prediction for page {i}: {prediction}")
 
         return jsonify({"message": "Extraction and prediction successful", "data": prediction})
