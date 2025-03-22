@@ -1,6 +1,6 @@
 "use client"; // Add this directive to make it a Client Component
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { ArrowLeft, Download, FileText } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation"; // Use next/navigation instead of next/router
@@ -18,7 +18,7 @@ import { FinancialRatiosTable } from "@/components/financial-ratios-table";
 
 export default function AnalysisPage({ params }) {
   const router = useRouter(); // Access the router
-  const { id } = params; // Access the dynamic route parameter `id`
+  const { id } = use(params); // Unwrap params with React.use() before destructuring
   const [loading, setLoading] = useState(true);
   const [companyData, setCompanyData] = useState(null);
   const [error, setError] = useState(null);
