@@ -18,7 +18,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device).half()
 model.eval()
 
-
 def extract_data_from_image(image_path):
     """Extracts text from a single image using Tesseract and LayoutLMv3."""
     image = Image.open(image_path).convert("RGB")
@@ -57,11 +56,9 @@ def extract_data_from_image(image_path):
         print(f"Error processing image: {str(e)}")
         return ""
 
-
 def process_page(image_path):
     """Helper function for multiprocessing."""
     return extract_data_from_image(image_path)
-
 
 def extract_data_from_pdf(pdf_path, output_dir="pdf_images", num_workers=4):
     """Converts a PDF into images and extracts text using multiprocessing."""
@@ -81,4 +78,3 @@ def extract_data_from_pdf(pdf_path, output_dir="pdf_images", num_workers=4):
         results = pool.map(process_page, image_paths)
 
     return "\n".join(results)
-

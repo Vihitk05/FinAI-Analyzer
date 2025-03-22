@@ -1,0 +1,347 @@
+import { BarChart3, Download, FileText, TrendingUp, Upload } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FinancialMetricsChart } from "@/components/financial-metrics-chart";
+import { FinancialRatiosTable } from "@/components/financial-ratios-table";
+import { RecentDocuments } from "@/components/recent-documents";
+
+export default function Dashboard() {
+  return (
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur" style={{"display":"flex","justifyContent":"center"}}>
+        <div className="container flex h-16 items-center justify-between">
+          <div className="flex items-center gap-2 font-bold text-xl">
+          <a href="/" style={{"cursor":"pointer"}}>
+            <span className="text-primary">Fin</span>
+            <span>Analyzer</span>
+            </a>
+          </div>
+          <nav className="flex items-center gap-6">
+            <Link href="/dashboard" className="text-sm font-medium">
+              Dashboard
+            </Link>
+            <Link href="/reports" className="text-sm font-medium text-muted-foreground">
+              Reports
+            </Link>
+            <Link href="/settings" className="text-sm font-medium text-muted-foreground">
+              Settings
+            </Link>
+            <Button size="sm" variant="outline">
+              <Upload className="mr-2 h-4 w-4" />
+              Upload
+            </Button>
+          </nav>
+        </div>
+      </header>
+      <main className="flex py-8" style={{"flexDirection":"column","alignItems":"center"}}>
+        <div className="container">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-3xl font-bold">Financial Dashboard</h1>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+              <Button size="sm">
+                <FileText className="mr-2 h-4 w-4" />
+                Generate Report
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3 mb-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Revenue</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">$4.2M</div>
+                <p className="text-xs text-muted-foreground">+12.5% from previous year</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">EBITDA</CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">$1.8M</div>
+                <p className="text-xs text-muted-foreground">+8.3% from previous year</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Working Capital</CardTitle>
+                <svg
+                  className="h-4 w-4 text-muted-foreground"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">$2.4M</div>
+                <p className="text-xs text-muted-foreground">+5.2% from previous year</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Tabs defaultValue="overview" className="mb-6">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="income">Income Statement</TabsTrigger>
+              <TabsTrigger value="balance">Balance Sheet</TabsTrigger>
+              <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Financial Performance</CardTitle>
+                  <CardDescription>Key financial metrics over the last 3 years</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <FinancialMetricsChart />
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Key Financial Ratios</CardTitle>
+                    <CardDescription>Profitability, liquidity, and solvency metrics</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FinancialRatiosTable />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Documents</CardTitle>
+                    <CardDescription>Recently analyzed financial statements</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <RecentDocuments />
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+            <TabsContent value="income">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Income Statement Overview</CardTitle>
+                  <CardDescription>Revenue, expenses, and profit analysis</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    The company has shown consistent revenue growth over the past 3 years, with a CAGR of 15.2%.
+                    Operating expenses have been well-managed, resulting in improved profit margins.
+                  </p>
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-sm font-medium mb-1">Revenue Breakdown</h3>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary w-[65%]"></div>
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                        <span>Product Sales (65%)</span>
+                        <span>Services (35%)</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium mb-1">Expense Allocation</h3>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary w-[40%]"></div>
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                        <span>COGS (40%)</span>
+                        <span>Operating Expenses (35%)</span>
+                        <span>Other (25%)</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="balance">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Balance Sheet Overview</CardTitle>
+                  <CardDescription>Assets, liabilities, and equity analysis</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    The company maintains a strong balance sheet with a healthy asset-to-liability ratio of 2.3:1.
+                    Current assets provide adequate coverage for short-term obligations.
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <h3 className="text-sm font-medium mb-2">Assets Composition</h3>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Current Assets</span>
+                          <span className="text-xs font-medium">45%</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary w-[45%]"></div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Fixed Assets</span>
+                          <span className="text-xs font-medium">35%</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary w-[35%]"></div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Other Assets</span>
+                          <span className="text-xs font-medium">20%</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary w-[20%]"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium mb-2">Liabilities & Equity</h3>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Current Liabilities</span>
+                          <span className="text-xs font-medium">25%</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary w-[25%]"></div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Long-term Liabilities</span>
+                          <span className="text-xs font-medium">30%</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary w-[30%]"></div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Equity</span>
+                          <span className="text-xs font-medium">45%</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary w-[45%]"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="cashflow">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cash Flow Overview</CardTitle>
+                  <CardDescription>Operating, investing, and financing activities</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    The company generated strong operating cash flows of $3.2M, representing a 18% increase from the
+                    previous year. Capital expenditures were focused on technology infrastructure and capacity
+                    expansion.
+                  </p>
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-sm font-medium mb-1">Cash Flow from Operations</h3>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs">$3.2M</span>
+                        <span className="text-xs text-green-500">+18% YoY</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500 w-[80%]"></div>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium mb-1">Cash Flow from Investing</h3>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs">-$1.8M</span>
+                        <span className="text-xs text-red-500">+25% YoY</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-red-500 w-[45%]"></div>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium mb-1">Cash Flow from Financing</h3>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs">-$0.5M</span>
+                        <span className="text-xs text-red-500">-10% YoY</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-red-500 w-[12%]"></div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Business Overview</CardTitle>
+                <CardDescription>AI-generated summary of business performance</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  The company demonstrates strong financial health with consistent revenue growth and improving
+                  profitability metrics. Key strengths include efficient working capital management and healthy cash
+                  flow generation. Areas for potential improvement include reducing the debt-to-equity ratio and
+                  optimizing inventory turnover.
+                </p>
+                <div className="mt-4 space-y-2">
+                  <h3 className="text-sm font-medium">Key Strengths</h3>
+                  <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+                    <li>Strong revenue growth (15.2% CAGR)</li>
+                    <li>Improving EBITDA margins (42.8%)</li>
+                    <li>Healthy cash flow generation</li>
+                    <li>Efficient working capital management</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Financial Due Diligence</CardTitle>
+                <CardDescription>Key findings and recommendations</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium mb-1">Risk Assessment</h3>
+                    <div className="flex items-center space-x-2">
+                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-yellow-500 w-[35%]"></div>
+                      </div>
+                      <span className="text-xs font-medium">Low-Medium</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Recommendations</h3>
+                    <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+                      <li>Reduce debt-to-equity ratio to improve financial stability</li>
+                      <li>Optimize inventory management to improve turnover ratio</li>
+                      <li>Consider diversifying revenue streams to reduce concentration risk</li>
+                      <li>Implement cost control measures to further improve EBITDA margins</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

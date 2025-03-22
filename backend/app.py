@@ -1,19 +1,19 @@
 from flask import Flask, request, jsonify, render_template
 from pymongo import MongoClient
 import os
+import requests
 from utils.pdf_processing import pdf_to_images
 from utils.text_extraction import extract_data_from_image
-from utils.vector_storage import store_in_chromadb
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-import torch
-import re
-from huggingface_hub import login
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from utils.vector_storage import store_in_chromadb, retrieve_from_chromadb
+from google.generativeai import GenerativeModel, configure
+from langchain.vectorstores import Chroma
+from langchain.embeddings import HuggingFaceEmbeddings
+
 # Initialize Flask app
 app = Flask(__name__)
 
 # Define upload folder
-UPLOAD_FOLDER = "uploads"
+UPLOAD_FOLDER = "data"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Connect to MongoDB (local instance)
@@ -21,71 +21,43 @@ client = MongoClient('mongodb://localhost:27017/')
 db = client.flask_db
 todos = db.todos
 
-# Hugging Face Hub login (if using a private model)
-access_token = "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"  # Replace with your actual token
-login(token=access_token)
+# Configure Google Gemini API
+GOOGLE_API_KEY = "AIzaSyAyiv0POSr2A-SzWEwPDMuRZhUzxZ70hm8"  # Replace with your actual Google API key
+import google.generativeai as genai
 
-# Load the tokenizer and model
-try:
-    print("Loading tokenizer and model...")
-    tokenizer = AutoTokenizer.from_pretrained("SOham01/results")
-    model = AutoModelForSeq2SeqLM.from_pretrained("SOham01/results",
-                                                 device_map="auto",
-                                                 max_memory={"cpu": "4GB"})
-    model.eval()  # Set model to evaluation mode
-    print("Tokenizer and model loaded successfully!")
-except Exception as e:
-    print(f"Error loading tokenizer or model: {e}")
-    raise e  # Stop execution if model/tokenizer fails to load
+# Initialize Hugging Face Embeddings (for ChromaDB)
+embeddings = HuggingFaceEmbeddings()
+genai.configure(api_key="AIzaSyAyiv0POSr2A-SzWEwPDMuRZhUzxZ70hm8")
 
-if torch.cuda.is_available():
-    model.half().to("cuda")
+# Initialize ChromaDB
+chroma_client = Chroma(persist_directory="chroma_db", embedding_function=embeddings)
 
-def clean_text(text):
-    """Clean extracted text by removing extra spaces and line breaks."""
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
-
-def split_text(text, chunk_size=10000):
-    """Split text into smaller chunks."""
-    return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
-
-def generate_prediction(chunk):
-    """Generate predictions for a text chunk using the fine-tuned model."""
+def generate_prediction(text):
     try:
-        prompt = (
-            "Act as a financial expert. This is the financial statement report data extracted from a pdf. "
-            "I want you to understand this text data and provide the following points in JSON format. "
-            "For each point, provide at least 1000 characters of detailed analysis:\n"
-            "1. BUSINESS OVERVIEW - Provide extensive details about the company's operations, market position, key products/services, competitive advantages, and business model\n"
-            "2. KEY FINDINGS, FINANCIAL DUE DILIGENCE - In-depth analysis of major financial findings, risks, opportunities, and recommendations\n"
-            "3. INCOME STATEMENT OVERVIEW - Detailed analysis of revenue streams, cost structures, profitability trends, and key performance indicators\n"
-            "4. BALANCE SHEET OVERVIEW - Comprehensive review of assets, liabilities, equity positions, and financial health metrics\n"
-            "5. ADJ EBITDA - Full analysis of EBITDA adjustments, normalization entries, and impact on valuation\n"
-            "6. ADJ WORKING CAPITAL - Complete examination of working capital components, adjustments, and operational implications\n"
-            f"Text: {chunk}"
-        )
+        # Define the prompt for Gemini
+        prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
-        # Tokenize and generate predictions
-        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096)
-        if torch.cuda.is_available():
-            inputs = {k: v.to("cuda") for k, v in inputs.items()}
+### Instruction:
+I will provide financial statement report data extracted from a PDF. Analyze this data in detail and provide a structured response covering the following key areas:
 
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                num_beams=4,
-                no_repeat_ngram_size=3,
-                early_stopping=True,
-                do_sample=True,
-                top_k=50,
-                top_p=0.95,
-                temperature=0.7,
-                max_length=4096,
-                min_length=1000
-            )
+1. BUSINESS OVERVIEW – Summarize the nature of the business, industry, key operations, and market positioning based on the data.
+2. KEY FINDINGS & FINANCIAL DUE DILIGENCE – Identify major financial insights, risks, inconsistencies, and any red flags from the analysis.
+3. INCOME STATEMENT OVERVIEW – Break down revenues, expenses, profitability, and trends over the reporting periods.
+4. BALANCE SHEET OVERVIEW – Summarize assets, liabilities, and equity positions, highlighting financial health indicators.
+5. ADJ EBITDA – If details on Adjusted EBITDA are available, analyze the adjustments made and their impact on profitability.
+6. ADJ WORKING CAPITAL – If provided, examine the adjustments to working capital and their implications on liquidity and operational efficiency.
 
-        return tokenizer.decode(outputs[0], skip_special_tokens=True)
+Format the response in JSON format with clear keys for each section. Ensure the analysis is detailed, data-driven, and actionable.
+
+### Input:
+{text}"""
+
+        # Generate the prediction using Gemini
+        response = genai.GenerativeModel('gemini-1.5-pro').generate_content(prompt)
+
+        # Parse the response to extract recommendations
+        response_text = response.text
+        return response_text
 
     except Exception as e:
         print(f"Error generating prediction: {e}")
@@ -148,13 +120,10 @@ def upload_pdf():
                 extracted_text.append(text)
 
                 # Store the extracted text in ChromaDB
-                # try:
-                #     store_in_chromadb(text, f"{file.filename}_page_{i}")
-                # except Exception as e:
-                #     print(f"Error storing in ChromaDB: {str(e)}")
-
-                # Generate predictions using the fine-tuned model
-
+                try:
+                    store_in_chromadb(text, f"{file.filename}_page_{i}")
+                except Exception as e:
+                    print(f"Error storing in ChromaDB: {str(e)}")
 
             except Exception as e:
                 print(f"Error extracting text from page {i}: {str(e)}")
@@ -163,10 +132,16 @@ def upload_pdf():
         if not extracted_text:
             return jsonify({"error": "Failed to extract any text"}), 500
 
-        # Join all extracted text and predictions into a single string
-        extracted_text = "\n\n\n".join(extracted_text).replace("Ġ", "")
-        prediction = process_large_text(extracted_text)
-        # extracted_text.append(f"Prediction for page {i}: {prediction}")
+        # Join all extracted text into a single string
+        result_text = "\n\n\n".join(extracted_text).replace("Ġ", "")
+
+        # Retrieve relevant data from ChromaDB
+        retrieved_data = retrieve_from_chromadb(result_text)
+        if retrieved_data:
+            result_text += "\n\nRetrieved Data:\n" + retrieved_data
+
+        # Generate prediction using Gemini
+        prediction = generate_prediction(result_text)
 
         return jsonify({"message": "Extraction and prediction successful", "data": prediction})
 
