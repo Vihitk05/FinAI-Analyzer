@@ -34,9 +34,9 @@ export default function ReportsPage() {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const response = await fetch("http://127.0.0.1/fetch_all_data");
+        const response = await fetch("http://127.0.0.1:5000/fetch_all_data/");
         const data = await response.json();
-        setReports(data);
+        setReports(data.data); // Extract the `data` array from the response
       } catch (error) {
         console.error("Error fetching reports:", error);
         setReports(defaultReport);
@@ -55,7 +55,7 @@ export default function ReportsPage() {
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl">
             <a href="/" style={{ cursor: "pointer" }}>
-              <span className="text-blue-600">Fin</span>
+              <span className="text-blue-600">FinAI</span>
               <span className="text-blue-900">Analyzer</span>
             </a>
           </div>

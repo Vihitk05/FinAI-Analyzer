@@ -16,20 +16,21 @@ export const FinancialRatiosTable = ({ data = [] }) => {
 
   // Function to get appropriate color based on the ratio type and value
   const getRatioColor = (ratio, value) => {
-    if (
-      ratio.toLowerCase().includes("margin") ||
-      ratio.toLowerCase().includes("return")
-    ) {
+    if (!ratio) return "text-blue-600"; // Default color if ratio is undefined
+
+    const lowerCaseRatio = ratio.toLowerCase(); // Safely convert to lowercase
+
+    if (lowerCaseRatio.includes("margin") || lowerCaseRatio.includes("return")) {
       // For profitability ratios, higher is better
       if (value > 15) return "text-green-600";
       if (value > 8) return "text-blue-600";
       return "text-amber-600";
-    } else if (ratio.toLowerCase().includes("debt")) {
+    } else if (lowerCaseRatio.includes("debt")) {
       // For debt ratios, lower is better
       if (value < 1) return "text-green-600";
       if (value < 2) return "text-blue-600";
       return "text-amber-600";
-    } else if (ratio.toLowerCase().includes("current")) {
+    } else if (lowerCaseRatio.includes("current")) {
       // For liquidity ratios like current ratio
       if (value > 1.5) return "text-green-600";
       if (value > 1) return "text-blue-600";
@@ -42,10 +43,14 @@ export const FinancialRatiosTable = ({ data = [] }) => {
 
   // Format the value as a percentage if appropriate
   const formatValue = (ratio, value) => {
+    if (!ratio || typeof value !== "number") return value; // Return value as is if ratio is undefined or value is not a number
+
+    const lowerCaseRatio = ratio.toLowerCase(); // Safely convert to lowercase
+
     if (
-      ratio.toLowerCase().includes("margin") ||
-      ratio.toLowerCase().includes("return") ||
-      ratio.toLowerCase().includes("growth")
+      lowerCaseRatio.includes("margin") ||
+      lowerCaseRatio.includes("return") ||
+      lowerCaseRatio.includes("growth")
     ) {
       return `${value.toFixed(1)}%`;
     }
@@ -69,7 +74,9 @@ export const FinancialRatiosTable = ({ data = [] }) => {
         <tbody>
           {ratios.map((item, index) => (
             <tr key={index} className="border-b">
-              <td className="py-3 px-2 text-muted-foreground">{item.ratio}</td>
+              <td className="py-3 px-2 text-muted-foreground">
+                {item.ratio || "N/A"} {/* Display "N/A" if ratio is undefined */}
+              </td>
               <td
                 className={`py-3 px-2 text-right font-medium ${getRatioColor(item.ratio, item.value)}`}
               >

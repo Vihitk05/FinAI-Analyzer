@@ -10,7 +10,7 @@ export function ReportSummary({ company, date, revenue, ebitda, netIncome }) {
         </div>
         <div>
           <p className="text-sm text-muted-foreground">Analysis Date</p>
-          <p className="font-medium">{date}</p>
+          <p className="font-medium">March 22, 2025</p>
         </div>
       </div>
 

@@ -12,7 +12,7 @@ import re  # For extracting JSON from text
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)
+CORS(app,origins="*")
 
 # Define upload folder
 UPLOAD_FOLDER = "data"
@@ -28,7 +28,7 @@ MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")  # Ensure this is set in you
 mistral_client = Mistral(api_key=MISTRAL_API_KEY)
 
 # Configure Google Gemini API
-GOOGLE_API_KEY = "AIzaSyDoxe2AMW_8R01w5SCXLwJHX3uSOq_pInY"  # Replace with your actual Google API key
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") # Replace with your actual Google API key
 genai.configure(api_key=GOOGLE_API_KEY)
 
 def generate_prediction(text, retries=3, delay=5):
@@ -137,7 +137,7 @@ Input:
         # Generate the prediction using DeepSeek API
         from together import Together
 
-        client = Together(api_key="tgp_v1_Cx5xaxjnWs7-w6zwbso6s2AQKW09lX9DNAR7LE5NQVw")  # Replace with your actual API key
+        client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))  # Replace with your actual API key
 
         stream = client.chat.completions.create(
             model="deepseek-ai/DeepSeek-R1",
@@ -172,7 +172,7 @@ from bson.objectid import ObjectId
 import json
 
 @app.route("/upload/", methods=["POST"])
-@cross_origin()
+# @cross_origin()
 def upload_pdf():
     # print(request.files)
     if "file" not in request.files:
@@ -259,12 +259,12 @@ def upload_pdf():
         return jsonify({"error": f"Extraction failed: {str(e)}"}), 500
 
 @app.route("/fetch_data/", methods=["POST"])
-@cross_origin()
+# @cross_origin()
 def fetch_data():
     try:
         # Step 1: Get the custom_id from the request JSON payload
         request_data = request.json
-        custom_id = request_data.get("custom_id")
+        custom_id = int(request_data.get("custom_id"))
 
         if not custom_id:
             return jsonify({"error": "custom_id is required"}), 400
@@ -282,6 +282,7 @@ def fetch_data():
         })
 
     except Exception as e:
+        print(str(e))
         return jsonify({"error": f"Failed to fetch data: {str(e)}"}), 500    
 
 @app.route("/fetch_all_data/", methods=["GET"])
@@ -305,6 +306,7 @@ def fetch_all_data():
 
 
 @app.route("/query/", methods=["POST"])
+@cross_origin()
 def query_data():
     try:
         # Step 1: Get the query and custom_id from the request JSON payload
@@ -332,7 +334,7 @@ def query_data():
         # Step 5: Use DeepSeek API to generate the response
         from together import Together
 
-        client = Together(api_key="tgp_v1_Cx5xaxjnWs7-w6zwbso6s2AQKW09lX9DNAR7LE5NQVw")  # Replace with your actual API key
+        client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))  # Replace with your actual API key
 
         stream = client.chat.completions.create(
             model="deepseek-ai/DeepSeek-R1",

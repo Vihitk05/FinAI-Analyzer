@@ -19,7 +19,7 @@ export default function Home() {
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl">
             <a href="/" style={{ cursor: "pointer" }}>
-              <span className="text-blue-500">Fin</span>
+              <span className="text-blue-500">FinAI</span>
               <span>Analyzer</span>
             </a>
           </div>

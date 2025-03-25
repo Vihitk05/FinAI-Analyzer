@@ -33,7 +33,7 @@ export default function UploadPage() {
     formData.append("file", selectedFile);
 
     try {
-      const response = await fetch("http://127.0.0.1:5000/upload", {
+      const response = await fetch("http://127.0.0.1:5000/upload/", {
         method: "POST",
         body: formData,
         // Removed mode: "cors" and credentials: "include" as they can cause issues
@@ -103,7 +103,7 @@ export default function UploadPage() {
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl">
             <a href="/" style={{ cursor: "pointer" }}>
-              <span className="text-blue-600">Fin</span>
+              <span className="text-blue-600">FinAI</span>
               <span className="text-blue-900">Analyzer</span>
             </a>
           </div>

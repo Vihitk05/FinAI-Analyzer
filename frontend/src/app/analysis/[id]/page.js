@@ -27,24 +27,20 @@ export default function AnalysisPage({ params }) {
     const fetchCompanyData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(
-          `http://127.0.0.1:5000/fetch_data`, // Endpoint URL
-          {
-            method: 'POST', // Change the method to POST
-            headers: {
-              
-              'Content-Type': 'application/json', // Set the content type to JSON
-            },
-            body: JSON.stringify({ custom_id: id }), // Include the custom_id in the request body
-          }
-        );
-  
+        const response = await fetch(`http://127.0.0.1:5000/fetch_data/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json', // Set the correct Content-Type
+          },
+          body: JSON.stringify({ custom_id: id }), // Include the custom_id in the request body
+        });
+
         if (!response.ok) {
           throw new Error(`Error: ${response.status}`);
         }
-  
+
         const data = await response.json();
-        setCompanyData(data);
+        setCompanyData(data.data); // Extract the `data` field from the response
         setLoading(false);
       } catch (err) {
         console.error("Failed to fetch company data:", err);
@@ -52,11 +48,30 @@ export default function AnalysisPage({ params }) {
         setLoading(false);
       }
     };
-  
+
     if (id) {
       fetchCompanyData();
     }
   }, [id]);
+
+  // Format currency (in thousands)
+  const formatCurrency = (value) => {
+    if (typeof value !== 'number' || isNaN(value)) return "$0"; // Check if value is a valid number
+    return `$${(value / 1000).toFixed(1)}K`;
+  };
+
+  // Format percentage
+  const formatPercentage = (value) => {
+    if (typeof value !== 'number' || isNaN(value)) return "0%"; // Check if value is a valid number
+    return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+  };
+
+  const safeToLowerCase = (value) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase();
+    }
+    return value || ""; // Return the value as is or an empty string if undefined
+  };
 
   // Show loading state
   if (loading) {
@@ -92,18 +107,6 @@ export default function AnalysisPage({ params }) {
     );
   }
 
-  // Format currency (in thousands)
-  const formatCurrency = (value) => {
-    if (!value) return "$0";
-    return `$${(value / 1000).toFixed(1)}K`;
-  };
-
-  // Format percentage
-  const formatPercentage = (value) => {
-    if (value === undefined || value === null) return "0%";
-    return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
-  };
-
   return (
     <div className="flex min-h-screen flex-col">
       <header
@@ -113,7 +116,7 @@ export default function AnalysisPage({ params }) {
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl">
             <Link href="/" style={{ cursor: "pointer" }}>
-              <span className="text-blue-500">Fin</span>
+              <span className="text-blue-500">FinAI</span>
               <span>Analyzer</span>
             </Link>
           </div>
@@ -154,11 +157,11 @@ export default function AnalysisPage({ params }) {
         <div className="container">
           <div className="mb-8">
             <Link
-              href="/dashboard"
+              href="/reports"
               className="inline-flex items-center text-sm text-blue-500 hover:text-blue-700 mb-4"
             >
               <ArrowLeft className="mr-1 h-4 w-4" />
-              Back to Dashboard
+              Back to Reports
             </Link>
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold text-blue-900">
@@ -170,7 +173,7 @@ export default function AnalysisPage({ params }) {
               </Button>
             </div>
             <p className="text-muted-foreground mt-2">
-              Analysis completed on March 15, 2023
+              Analysis completed on March 22, 2025
             </p>
           </div>
 

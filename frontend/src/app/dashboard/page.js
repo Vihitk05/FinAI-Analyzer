@@ -31,7 +31,7 @@ export default function Dashboard() {
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl">
             <Link href="/" style={{ cursor: "pointer" }}>
-              <span className="text-blue-600">Fin</span>
+              <span className="text-blue-600">FinAI</span>
               <span className="text-blue-900">Analyzer</span>
             </Link>
           </div>
