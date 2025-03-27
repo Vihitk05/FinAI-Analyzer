@@ -15,6 +15,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FinancialMetricsChart } from "@/components/financial-metrics-chart";
 import { FinancialRatiosTable } from "@/components/financial-ratios-table";
+import { ChatBot } from "@/components/Chatbot";
 
 export default function AnalysisPage({ params }) {
   const router = useRouter(); // Access the router
@@ -22,15 +23,28 @@ export default function AnalysisPage({ params }) {
   const [loading, setLoading] = useState(true);
   const [companyData, setCompanyData] = useState(null);
   const [error, setError] = useState(null);
-
+  const getHealthWidth = (value) => {
+    switch (value?.toLowerCase()) {
+      case "fair":
+        return 40;
+      case "good":
+        return 60;
+      case "strong":
+        return 80;
+      case "excellent":
+        return 100;
+      default:
+        return 0; // For "N/A" or undefined values
+    }
+  };
   useEffect(() => {
     const fetchCompanyData = async () => {
       try {
         setLoading(true);
         const response = await fetch(`http://127.0.0.1:5000/fetch_data/`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json', // Set the correct Content-Type
+            "Content-Type": "application/json", // Set the correct Content-Type
           },
           body: JSON.stringify({ custom_id: id }), // Include the custom_id in the request body
         });
@@ -56,18 +70,18 @@ export default function AnalysisPage({ params }) {
 
   // Format currency (in thousands)
   const formatCurrency = (value) => {
-    if (typeof value !== 'number' || isNaN(value)) return "$0"; // Check if value is a valid number
+    if (typeof value !== "number" || isNaN(value)) return "$0"; // Check if value is a valid number
     return `$${(value / 1000).toFixed(1)}K`;
   };
 
   // Format percentage
   const formatPercentage = (value) => {
-    if (typeof value !== 'number' || isNaN(value)) return "0%"; // Check if value is a valid number
+    if (typeof value !== "number" || isNaN(value)) return "0%"; // Check if value is a valid number
     return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
   };
 
   const safeToLowerCase = (value) => {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       return value.toLowerCase();
     }
     return value || ""; // Return the value as is or an empty string if undefined
@@ -133,20 +147,20 @@ export default function AnalysisPage({ params }) {
             >
               Reports
             </Link>
-            <Link
+            {/* <Link
               href="/settings"
               className="text-sm font-medium text-muted-foreground hover:text-blue-500"
             >
               Settings
-            </Link>
-            <Button
+            </Link> */}
+            {/* <Button
               size="sm"
               variant="outline"
               className="text-blue-500 border-blue-500 hover:bg-blue-50"
             >
               <Download className="mr-2 h-4 w-4" />
               Export
-            </Button>
+            </Button> */}
           </nav>
         </div>
       </header>
@@ -165,15 +179,15 @@ export default function AnalysisPage({ params }) {
             </Link>
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold text-blue-900">
-                Sony Financial Analysis
+                {companyData?.companyName}
               </h1>
-              <Button className="bg-blue-500 hover:bg-blue-600">
+              {/* <Button className="bg-blue-500 hover:bg-blue-600">
                 <FileText className="mr-2 h-4 w-4" />
                 Generate Full Report
-              </Button>
+              </Button> */}
             </div>
             <p className="text-muted-foreground mt-2">
-              Analysis completed on March 22, 2025
+              Analysis completed {companyData?.analysis_date}
             </p>
           </div>
 
@@ -229,7 +243,7 @@ export default function AnalysisPage({ params }) {
                             Revenue
                           </p>
                           <p className="text-2xl font-bold text-blue-900">
-                            {formatCurrency(companyData?.revenue)}
+                            ${companyData?.revenue}
                           </p>
                           <p className="text-xs text-blue-500">
                             {formatPercentage(companyData?.revenueGrowth)} YoY
@@ -240,7 +254,7 @@ export default function AnalysisPage({ params }) {
                             EBITDA
                           </p>
                           <p className="text-2xl font-bold text-blue-900">
-                            {formatCurrency(companyData?.ebitda)}
+                            ${companyData?.ebitda}
                           </p>
                           <p className="text-xs text-blue-500">
                             {formatPercentage(companyData?.ebitdaGrowth)} YoY
@@ -251,7 +265,7 @@ export default function AnalysisPage({ params }) {
                             Net Income
                           </p>
                           <p className="text-2xl font-bold text-blue-900">
-                            {formatCurrency(companyData?.netIncome)}
+                            ${companyData?.netIncome}
                           </p>
                           <p className="text-xs text-blue-500">
                             {formatPercentage(companyData?.netIncomeGrowth)} YoY
@@ -262,7 +276,7 @@ export default function AnalysisPage({ params }) {
                             Free Cash Flow
                           </p>
                           <p className="text-2xl font-bold text-blue-900">
-                            {formatCurrency(companyData?.freeCashFlow)}
+                            ${companyData?.freeCashFlow}
                           </p>
                           <p className="text-xs text-blue-500">
                             {formatPercentage(companyData?.freeCashFlowGrowth)}{" "}
@@ -294,7 +308,14 @@ export default function AnalysisPage({ params }) {
                           </span>
                         </div>
                         <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 w-[75%]"></div>
+                          <div
+                            className="h-full bg-blue-500"
+                            style={{
+                              width: `${getHealthWidth(
+                                companyData?.overallFinancialHealth
+                              )}%`,
+                            }}
+                          ></div>
                         </div>
                       </div>
                       <div>
@@ -305,7 +326,14 @@ export default function AnalysisPage({ params }) {
                           </span>
                         </div>
                         <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 w-[60%]"></div>
+                          <div
+                            className="h-full bg-blue-500"
+                            style={{
+                              width: `${getHealthWidth(
+                                companyData?.liquidity
+                              )}%`,
+                            }}
+                          ></div>
                         </div>
                       </div>
                       <div>
@@ -316,7 +344,14 @@ export default function AnalysisPage({ params }) {
                           </span>
                         </div>
                         <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 w-[65%]"></div>
+                          <div
+                            className="h-full bg-blue-500"
+                            style={{
+                              width: `${getHealthWidth(
+                                companyData?.solvency
+                              )}%`,
+                            }}
+                          ></div>
                         </div>
                       </div>
                       <div>
@@ -329,7 +364,14 @@ export default function AnalysisPage({ params }) {
                           </span>
                         </div>
                         <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 w-[75%]"></div>
+                          <div
+                            className="h-full bg-blue-500"
+                            style={{
+                              width: `${getHealthWidth(
+                                companyData?.profitability
+                              )}%`,
+                            }}
+                          ></div>
                         </div>
                       </div>
                     </div>
@@ -401,9 +443,7 @@ export default function AnalysisPage({ params }) {
                           </h4>
                           <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
                             {companyData?.areasOfConcern?.map(
-                              (concern, index) => (
-                                <li key={index}>{concern}</li>
-                              ),
+                              (concern, index) => <li key={index}>{concern}</li>
                             ) || <li>No concerns data available.</li>}
                           </ul>
                         </div>
@@ -437,10 +477,10 @@ export default function AnalysisPage({ params }) {
                                 {item.category}
                               </p>
                               <p className="text-xl font-bold text-blue-900">
-                                {formatCurrency(item.amount)}
+                                $ {item.amount}
                               </p>
                             </div>
-                          ),
+                          )
                         )}
                       </div>
                     </div>
@@ -456,10 +496,10 @@ export default function AnalysisPage({ params }) {
                                 {item.category}
                               </p>
                               <p className="text-xl font-bold text-blue-900">
-                                {formatCurrency(item.amount)}
+                                $ {item.amount}
                               </p>
                             </div>
-                          ),
+                          )
                         )}
                       </div>
                     </div>
@@ -491,10 +531,10 @@ export default function AnalysisPage({ params }) {
                                 {item.category}
                               </p>
                               <p className="text-xl font-bold text-blue-900">
-                                {formatCurrency(item.amount)}
+                                ${item.amount}
                               </p>
                             </div>
-                          ),
+                          )
                         )}
                       </div>
                     </div>
@@ -510,10 +550,10 @@ export default function AnalysisPage({ params }) {
                                 {item.category}
                               </p>
                               <p className="text-xl font-bold text-blue-900">
-                                {formatCurrency(item.amount)}
+                                ${item.amount}
                               </p>
                             </div>
-                          ),
+                          )
                         )}
                       </div>
                     </div>
@@ -539,7 +579,7 @@ export default function AnalysisPage({ params }) {
                           Operating Activities
                         </h3>
                         <p className="text-2xl font-bold text-blue-900">
-                          {formatCurrency(companyData?.cashFlowOperations)}
+                          $ {companyData?.cashFlowOperations}
                         </p>
                       </div>
                       <div>
@@ -547,7 +587,7 @@ export default function AnalysisPage({ params }) {
                           Investing Activities
                         </h3>
                         <p className="text-2xl font-bold text-blue-900">
-                          {formatCurrency(companyData?.cashFlowInvesting)}
+                          $ {companyData?.cashFlowInvesting}
                         </p>
                       </div>
                       <div>
@@ -555,7 +595,7 @@ export default function AnalysisPage({ params }) {
                           Financing Activities
                         </h3>
                         <p className="text-2xl font-bold text-blue-900">
-                          {formatCurrency(companyData?.cashFlowFinancing)}
+                          $ {companyData?.cashFlowFinancing}
                         </p>
                       </div>
                     </div>
@@ -615,7 +655,7 @@ export default function AnalysisPage({ params }) {
                       {companyData?.keyObservations?.map(
                         (observation, index) => (
                           <li key={index}>{observation}</li>
-                        ),
+                        )
                       ) || <li>No observations available.</li>}
                     </ul>
                   </div>
@@ -627,7 +667,7 @@ export default function AnalysisPage({ params }) {
                       {companyData?.recommendations?.map(
                         (recommendation, index) => (
                           <li key={index}>{recommendation}</li>
-                        ),
+                        )
                       ) || <li>No recommendations available.</li>}
                     </ul>
                   </div>
@@ -652,6 +692,7 @@ export default function AnalysisPage({ params }) {
           </Card>
         </div>
       </main>
+      <ChatBot customId={id} />
     </div>
   );
 }

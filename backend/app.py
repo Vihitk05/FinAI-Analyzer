@@ -31,13 +31,15 @@ mistral_client = Mistral(api_key=MISTRAL_API_KEY)
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") # Replace with your actual Google API key
 genai.configure(api_key=GOOGLE_API_KEY)
 
-def generate_prediction(text, retries=3, delay=5):
-    try:
-        # Define the prompt for Gemini
-        prompt = f"""
-        Instruction:
+def generate_prediction(text, retries=3, delay=60):
+    for attempt in range(retries):
+        try:
+            # Define the prompt for Gemini
+            prompt = f"""
+Instruction:
 I will provide financial statement report data extracted from a PDF. Analyze this data in detail and provide a structured response in the following JSON format:
 {{
+  "companyName": ["string", "Name of the company"],
   "revenue": ["number", "Total revenue in dollars"],
   "revenueGrowth": ["number", "Year-over-year revenue growth percentage"],
   "ebitda": ["number", "EBITDA in dollars"],
@@ -46,51 +48,35 @@ I will provide financial statement report data extracted from a PDF. Analyze thi
   "netIncomeGrowth": ["number", "Year-over-year net income growth percentage"],
   "freeCashFlow": ["number", "Free cash flow in dollars"],
   "freeCashFlowGrowth": ["number", "Year-over-year free cash flow growth percentage"],
-
   "overallFinancialHealth": ["string", "Overall financial health rating (e.g., Strong, Good)"],
   "liquidity": ["string", "Liquidity rating (e.g., Excellent, Good)"],
   "solvency": ["string", "Solvency rating (e.g., Good, Fair)"],
   "profitability": ["string", "Profitability rating (e.g., Good, Fair)"],
-
   "companyProfile": ["string", "Description of the company profile"],
   "keyFindings": ["array", "List of key findings (e.g., Strong Revenue Growth, Improving Operating Margins)"],
   "strengths": ["array", "List of company strengths"],
   "areasOfConcern": ["array", "List of areas of concern"],
-
   "financialMetricsChartData": ["array", "Data for financial metrics chart (e.g., revenue, ebitda, net income over time)"],
-
   "financialRatios": ["array", "List of key financial ratios (e.g., profitability, liquidity, solvency ratios)"],
-
   "keyObservations": ["array", "List of key observations"],
   "recommendations": ["array", "List of recommendations"],
-
   "executiveSummary": ["string", "Comprehensive analysis and key takeaways"],
-
-  "dashboardRevenue": ["number", "Revenue for the dashboard overview"],
-  "dashboardRevenueGrowth": ["number", "Year-over-year revenue growth percentage for the dashboard"],
-  "dashboardEbitda": ["number", "EBITDA for the dashboard overview"],
-  "dashboardEbitdaGrowth": ["number", "Year-over-year EBITDA growth percentage for the dashboard"],
-  "dashboardWorkingCapital": ["number", "Working capital for the dashboard overview"],
-  "dashboardWorkingCapitalGrowth": ["number", "Year-over-year working capital growth percentage for the dashboard"],
-
   "incomeStatementRevenueBreakdown": ["array", "Revenue breakdown (e.g., Product Sales, Services)"],
   "incomeStatementExpenseAllocation": ["array", "Expense allocation (e.g., COGS, Operating Expenses, Other)"],
-
   "balanceSheetAssetsComposition": ["array", "Assets composition (e.g., Current Assets, Fixed Assets, Other Assets)"],
   "balanceSheetLiabilitiesEquity": ["array", "Liabilities and equity breakdown (e.g., Current Liabilities, Long-term Liabilities, Equity)"],
-
   "cashFlowOperations": ["number", "Cash flow from operations"],
   "cashFlowInvesting": ["number", "Cash flow from investing"],
   "cashFlowFinancing": ["number", "Cash flow from financing"],
-
   "businessOverviewSummary": ["string", "AI-generated summary of business performance"],
   "businessOverviewStrengths": ["array", "List of business strengths"],
-
   "riskAssessment": ["string", "Risk assessment rating (e.g., Low-Medium, High)"],
   "dueDiligenceRecommendations": ["array", "List of financial due diligence recommendations"]
 }}
+
 If any data is not available in the provided financial statement, use the following default values:
 {{
+  "companyName": "",
   "revenue": 0,
   "revenueGrowth": 0,
   "ebitda": 0,
@@ -112,12 +98,6 @@ If any data is not available in the provided financial statement, use the follow
   "keyObservations": [],
   "recommendations": [],
   "executiveSummary": "",
-  "dashboardRevenue": 0,
-  "dashboardRevenueGrowth": 0,
-  "dashboardEbitda": 0,
-  "dashboardEbitdaGrowth": 0,
-  "dashboardWorkingCapital": 0,
-  "dashboardWorkingCapitalGrowth": 0,
   "incomeStatementRevenueBreakdown": [],
   "incomeStatementExpenseAllocation": [],
   "balanceSheetAssetsComposition": [],
@@ -132,31 +112,42 @@ If any data is not available in the provided financial statement, use the follow
 }}
 
 Input:
-{text}"""
+{text}
+"""
+            # Generate the prediction using DeepSeek API
+            from together import Together
 
-        # Generate the prediction using DeepSeek API
-        from together import Together
+            client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))
 
-        client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))  # Replace with your actual API key
+            stream = client.chat.completions.create(
+                model="deepseek-ai/DeepSeek-R1",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                stream=True,
+            )
+            
+            response_text = ""
+            for chunk in stream:
+                response_text += chunk.choices[0].delta.content
+                print(chunk.choices[0].delta.content or "", end="", flush=True)
+            
+            return response_text.split("</think>")[-1] if "</think>" in response_text else response_text
+            
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {str(e)}")
+            if "rate limit" in str(e).lower() and attempt < retries - 1:
+                print(f"Rate limit hit. Waiting {delay} seconds before retry...")
+                time.sleep(delay)
+                continue
+            return f"Prediction error after {attempt + 1} attempts: {str(e)}"
+    
+    return "Max retries reached without successful prediction"
 
-        stream = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-R1",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            stream=True,
-        )
-        response_text = ""
-        for chunk in stream:
-            response_text += chunk.choices[0].delta.content
-            print(chunk.choices[0].delta.content or "", end="", flush=True)
-        return response_text
-    except Exception as e:
-        print(f"Error generating prediction: {e}")
-        return f"Prediction error: {e}"
+
 
 def extract_json_from_text(text):
     """Extract JSON data from the response text using regex."""
@@ -241,7 +232,8 @@ def upload_pdf():
         # Step 10: Add the custom ID to the prediction data
         prediction_data["custom_id"] = custom_id
         prediction_data["analysis_date"] = datetime.datetime.now()
-
+        current_date = datetime.today().strftime("%B %d, %Y")
+        prediction_data["analysis_date"] = str(current_date)
         # Step 11: Store the prediction data in MongoDB
         result = financial_data.insert_one(prediction_data)
 
@@ -256,7 +248,9 @@ def upload_pdf():
         })
 
     except Exception as e:
+        print(f"Extraction failed: {str(e)}")
         return jsonify({"error": f"Extraction failed: {str(e)}"}), 500
+        
 
 @app.route("/fetch_data/", methods=["POST"])
 # @cross_origin()
@@ -308,57 +302,247 @@ def fetch_all_data():
 @app.route("/query/", methods=["POST"])
 @cross_origin()
 def query_data():
+    max_retries = 3  # Maximum number of retries
+    retry_delay = 60  # Delay in seconds between retries (for rate limits)
+    
+    for attempt in range(max_retries):
+        try:
+            # Step 1: Get the query and custom_id from the request JSON payload
+            request_data = request.json
+            custom_id = int(request_data.get("custom_id"))
+            query = request_data.get("query")
+
+            if not custom_id or not query:
+                return jsonify({"error": "custom_id and query are required"}), 400
+
+            # Step 2: Query the database for the document with the specified custom_id
+            document = financial_data.find_one({"custom_id": custom_id}, {"_id": False})  # Exclude MongoDB's _id field
+
+            if not document:
+                return jsonify({"error": f"No document found with custom_id: {custom_id}"}), 404
+
+            # Step 3: Extract the all_data field from the document
+            all_data = document.get("all_data")
+            if not all_data:
+                return jsonify({"error": "No all_data field found in the document"}), 404
+
+            # Step 4: Generate the prompt for DeepSeek
+            prompt = f"""Act as a financial expert. This is the data of an analysis report: {all_data}. Answer the given query in short: {query} based on the provided data."""
+
+            # Step 5: Use DeepSeek API to generate the response
+            from together import Together
+
+            client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))  # Replace with your actual API key
+
+            stream = client.chat.completions.create(
+                model="deepseek-ai/DeepSeek-R1",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                stream=True,
+            )
+            response_text = ""
+            for chunk in stream:
+                response_text += chunk.choices[0].delta.content
+                print(chunk.choices[0].delta.content or "", end="", flush=True)
+
+            
+            response_text = str(response_text.split("</think>")[-1]).replace("*","")
+            
+            # Step 6: Return the response as a string
+            return jsonify({
+                "message": "Query processed successfully",
+                "response": response_text
+            })
+
+        except Exception as e:
+            if "rate limit" in str(e):
+                if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                    time.sleep(retry_delay)
+                    continue  # Retry the loop
+            # If it's not a rate limit error or we've exhausted retries, return the error
+            return jsonify({"error": f"Failed to process query: {str(e)}"}), 500
+    
+    # This line should theoretically never be reached because we return in all cases above
+    return jsonify({"error": "Max retries reached without success"}), 500
+
+
+@app.route("/api/dashboard", methods=["GET"])
+@cross_origin()
+def get_dashboard_data():
     try:
-        # Step 1: Get the query and custom_id from the request JSON payload
-        request_data = request.json
-        custom_id = request_data.get("custom_id")
-        query = request_data.get("query")
+        # Get all documents from the database
+        all_reports = list(financial_data.find({}, {"_id": 0}))
 
-        if not custom_id or not query:
-            return jsonify({"error": "custom_id and query are required"}), 400
+        if not all_reports:
+            return jsonify({"error": "No reports found in database"}), 404
 
-        # Step 2: Query the database for the document with the specified custom_id
-        document = financial_data.find_one({"custom_id": custom_id}, {"_id": False})  # Exclude MongoDB's _id field
+        # Convert string dates to datetime objects for comparison
+        for report in all_reports:
+            if 'analysis_date' in report and isinstance(report['analysis_date'], str):
+                try:
+                    report['parsed_date'] = datetime.datetime.strptime(report['analysis_date'], "%B %d, %Y")
+                except ValueError:
+                    report['parsed_date'] = datetime.datetime.min  # Fallback for invalid dates
+            else:
+                report['parsed_date'] = datetime.datetime.min  # Ensure all have a date for comparison
 
-        if not document:
-            return jsonify({"error": f"No document found with custom_id: {custom_id}"}), 404
+        # Initialize aggregated data structure
+        aggregated = {
+            "companyName": all_reports[0]["companyName"] if all_reports else "",
+            "revenue": 0,
+            "revenueGrowth": 0,
+            "ebitda": 0,
+            "ebitdaGrowth": 0,
+            "netIncome": 0,
+            "netIncomeGrowth": 0,
+            "freeCashFlow": 0,
+            "freeCashFlowGrowth": 0,
+            "overallFinancialHealth": "",
+            "liquidity": "",
+            "solvency": "",
+            "profitability": "",
+            "companyProfile": all_reports[0].get("companyProfile", ""),
+            "keyFindings": [],
+            "strengths": [],
+            "areasOfConcern": [],
+            "financialMetricsChartData": [],
+            "financialRatios": [],
+            "keyObservations": [],
+            "recommendations": [],
+            "executiveSummary": "",
+            "incomeStatementRevenueBreakdown": [],
+            "incomeStatementExpenseAllocation": [],
+            "balanceSheetAssetsComposition": [],
+            "balanceSheetLiabilitiesEquity": [],
+            "cashFlowOperations": 0,
+            "cashFlowInvesting": 0,
+            "cashFlowFinancing": 0,
+            "businessOverviewSummary": "",
+            "businessOverviewStrengths": [],
+            "riskAssessment": "",
+            "dueDiligenceRecommendations": []
+        }
 
-        # Step 3: Extract the all_data field from the document
-        all_data = document.get("all_data")
-        if not all_data:
-            return jsonify({"error": "No all_data field found in the document"}), 404
+        # Calculate averages for numeric fields
+        numeric_fields = [
+            "revenue", "revenueGrowth", "ebitda", "ebitdaGrowth",
+            "netIncome", "netIncomeGrowth", "freeCashFlow", "freeCashFlowGrowth",
+            "cashFlowOperations", "cashFlowInvesting", "cashFlowFinancing"
+        ]
 
-        # Step 4: Generate the prompt for DeepSeek
-        prompt = f"""Act as a financial expert. This is the data of an analysis report: {all_data}. Answer the given query: {query} based on the provided data."""
+        for field in numeric_fields:
+            valid_values = [report.get(field, 0) for report in all_reports 
+                            if isinstance(report.get(field, 0), (int, float))]
+            if valid_values:
+                aggregated[field] = sum(valid_values) / len(valid_values)
 
-        # Step 5: Use DeepSeek API to generate the response
-        from together import Together
+        # Get most recent report using parsed dates
+        most_recent_report = max(all_reports, key=lambda x: x.get('parsed_date', datetime.datetime.min))
 
-        client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))  # Replace with your actual API key
+        # Get health ratings from most recent report
+        health_fields = [
+            "overallFinancialHealth", "liquidity", "solvency", "profitability",
+            "riskAssessment"
+        ]
+        
+        for field in health_fields:
+            aggregated[field] = most_recent_report.get(field, "")
 
-        stream = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-R1",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            stream=True,
-        )
-        response_text = ""
-        for chunk in stream:
-            response_text += chunk.choices[0].delta.content
-            print(chunk.choices[0].delta.content or "", end="", flush=True)
+        # Aggregate array fields (handle both strings and dictionaries)
+        array_fields = [
+            "keyFindings", "strengths", "areasOfConcern", "financialRatios",
+            "keyObservations", "recommendations", "businessOverviewStrengths",
+            "dueDiligenceRecommendations"
+        ]
+        
+        for field in array_fields:
+            seen_items = set()
+            unique_items = []
+            for report in all_reports:
+                if isinstance(report.get(field), list):
+                    for item in report[field]:
+                        if isinstance(item, dict):
+                            item_tuple = tuple(sorted((k, str(v)) for k, v in item.items()))
+                            if item_tuple not in seen_items:
+                                seen_items.add(item_tuple)
+                                unique_items.append(item)
+                        elif isinstance(item, str):
+                            if item not in seen_items:
+                                seen_items.add(item)
+                                unique_items.append(item)
+            aggregated[field] = unique_items
 
-        # Step 6: Return the response as a string
-        return jsonify({
-            "message": "Query processed successfully",
-            "response": response_text
-        })
+        # Prepare financial metrics chart data (last 3 years)
+        current_year = datetime.datetime.now().year
+        years = [current_year - i for i in range(3)][::-1]  # [2022, 2023, 2024]
+
+        for year in years:
+            year_data = {
+                "year": year,
+                "revenue": 0,
+                "ebitda": 0,
+                "netIncome": 0
+            }
+
+            # Find reports for this year (Fixed issue with datetime)
+            year_reports = [
+                r for r in all_reports 
+                if r.get("analysis_date") and str(year) in str(r["analysis_date"])
+            ]
+
+            if year_reports:
+                # Use average values for the year
+                year_data["revenue"] = sum(r.get("revenue", 0) for r in year_reports) / len(year_reports)
+                year_data["ebitda"] = sum(r.get("ebitda", 0) for r in year_reports) / len(year_reports)
+                year_data["netIncome"] = sum(r.get("netIncome", 0) for r in year_reports) / len(year_reports)
+
+            aggregated["financialMetricsChartData"].append(year_data)
+
+        # Aggregate financial statement breakdowns (from most recent report)
+        breakdown_fields = [
+            "incomeStatementRevenueBreakdown",
+            "incomeStatementExpenseAllocation",
+            "balanceSheetAssetsComposition",
+            "balanceSheetLiabilitiesEquity"
+        ]
+        
+        for field in breakdown_fields:
+            if field in most_recent_report:
+                aggregated[field] = most_recent_report[field]
+
+        # Calculate totals for percentage calculations
+        if "balanceSheetAssetsComposition" in aggregated and aggregated["balanceSheetAssetsComposition"]:
+            aggregated["totalAssets"] = sum(
+                item.get("amount", 0) for item in aggregated["balanceSheetAssetsComposition"]
+                if isinstance(item, dict)
+            )
+            
+        if "balanceSheetLiabilitiesEquity" in aggregated and aggregated["balanceSheetLiabilitiesEquity"]:
+            aggregated["totalLiabilitiesEquity"] = sum(
+                item.get("amount", 0) for item in aggregated["balanceSheetLiabilitiesEquity"]
+                if isinstance(item, dict)
+            )
+
+        # Generate summary texts from most recent report
+        text_fields = [
+            "executiveSummary",
+            "businessOverviewSummary"
+        ]
+        
+        for field in text_fields:
+            if field in most_recent_report:
+                aggregated[field] = most_recent_report[field]
+
+        return jsonify(aggregated)
 
     except Exception as e:
-        return jsonify({"error": f"Failed to process query: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to aggregate dashboard data: {str(e)}"}), 500
+
+
 # Run the Flask app
 if __name__ == "__main__":
     app.run(debug=True)

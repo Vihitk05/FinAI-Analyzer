@@ -26,31 +26,25 @@ export default function UploadPage() {
       alert("Please select a file first!");
       return;
     }
-
     setIsUploading(true);
-
     const formData = new FormData();
     formData.append("file", selectedFile);
-
     try {
       const response = await fetch("http://127.0.0.1:5000/upload/", {
         method: "POST",
         body: formData,
-        // Removed mode: "cors" and credentials: "include" as they can cause issues
-        // The server should handle CORS properly on its end
-        headers: {
-          // Removed "Access-Control-Allow-Origin" as this is a response header, not a request header
-        },
       });
-
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
       const data = await response.json();
       console.log("Upload successful:", data);
-      alert("File uploaded successfully!");
-      setSelectedFile(null); // Reset selected file after successful upload
+      const custom_id = data.custom_id;
+      if (!custom_id) {
+        throw new Error("No custom_id received in the response");
+      }
+      window.location.href = `/analysis/${custom_id}`;
+      setSelectedFile(null); 
     } catch (error) {
       console.error("Upload failed:", error);
       alert("Upload failed: " + error.message);
@@ -120,12 +114,12 @@ export default function UploadPage() {
             >
               Reports
             </a>
-            <a
+            {/* <a
               href="/settings"
               className="text-sm font-medium text-blue-800 hover:text-blue-600"
             >
               Settings
-            </a>
+            </a> */}
             <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
               <Upload className="mr-2 h-4 w-4" />
               Upload

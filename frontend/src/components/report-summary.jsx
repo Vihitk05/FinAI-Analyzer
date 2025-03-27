@@ -10,7 +10,7 @@ export function ReportSummary({ company, date, revenue, ebitda, netIncome }) {
         </div>
         <div>
           <p className="text-sm text-muted-foreground">Analysis Date</p>
-          <p className="font-medium">March 22, 2025</p>
+          <p className="font-medium">{date}</p>
         </div>
       </div>
 
@@ -18,30 +18,23 @@ export function ReportSummary({ company, date, revenue, ebitda, netIncome }) {
         <div className="space-y-1">
           <p className="text-sm text-muted-foreground">Revenue</p>
           <div className="flex items-center">
-            <p className="font-medium mr-1">{revenue}</p>
+            <p className="font-medium mr-1">${revenue}</p>
             <TrendingUp className="h-3 w-3 text-green-500" />
           </div>
         </div>
         <div className="space-y-1">
           <p className="text-sm text-muted-foreground">EBITDA</p>
           <div className="flex items-center">
-            <p className="font-medium mr-1">{ebitda}</p>
+            <p className="font-medium mr-1">${ebitda}</p>
             <TrendingUp className="h-3 w-3 text-green-500" />
           </div>
         </div>
         <div className="space-y-1">
           <p className="text-sm text-muted-foreground">Net Income</p>
           <div className="flex items-center">
-            <p className="font-medium mr-1">{netIncome}</p>
+            <p className="font-medium mr-1">${netIncome}</p>
             <TrendingUp className="h-3 w-3 text-green-500" />
           </div>
-        </div>
-      </div>
-
-      <div className="pt-2">
-        <div className="flex items-center text-sm text-primary">
-          <span className="mr-1">View key insights</span>
-          <ArrowUpRight className="h-3 w-3" />
         </div>
       </div>
     </div>

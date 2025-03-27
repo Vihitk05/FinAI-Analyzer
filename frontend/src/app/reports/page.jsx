@@ -30,21 +30,69 @@ export default function ReportsPage() {
   ];
 
   const [reports, setReports] = useState([]);
+  const [filteredReports, setFilteredReports] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const response = await fetch("http://127.0.0.1:5000/fetch_all_data/");
+        const response = await fetch("http://127.0.0.1:5000/fetch_all_data/", {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+        });
+  
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
-        setReports(data.data); // Extract the `data` array from the response
+        setReports(data.data);
+        setFilteredReports(data.data); // Initialize filtered reports with all reports
       } catch (error) {
         console.error("Error fetching reports:", error);
         setReports(defaultReport);
+        setFilteredReports(defaultReport);
       }
     };
-
+  
     fetchReports();
   }, []);
+
+  // Search function to filter reports
+  const handleSearch = (term) => {
+    setSearchTerm(term);
+    if (!term.trim()) {
+      setFilteredReports(reports);
+      return;
+    }
+
+    const filtered = reports.filter(report => {
+      // Search in company name (case insensitive)
+      if (report.companyName?.toLowerCase().includes(term.toLowerCase())) {
+        return true;
+      }
+      // Search in analysis date
+      if (report.analysis_date?.toLowerCase().includes(term.toLowerCase())) {
+        return true;
+      }
+      // Search in custom_id
+      if (report.custom_id?.toString().includes(term)) {
+        return true;
+      }
+      // Search in financial metrics (as strings)
+      if (
+        report.revenue?.toString().includes(term) ||
+        report.ebitda?.toString().includes(term) ||
+        report.netIncome?.toString().includes(term)
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    setFilteredReports(filtered.length > 0 ? filtered : []);
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-blue-50">
@@ -68,12 +116,6 @@ export default function ReportsPage() {
             </a>
             <a href="/reports" className="text-sm font-medium text-blue-900">
               Reports
-            </a>
-            <a
-              href="/settings"
-              className="text-sm font-medium text-blue-700 hover:text-blue-900"
-            >
-              Settings
             </a>
             <a href="/upload">
               <Button
@@ -104,12 +146,18 @@ export default function ReportsPage() {
                   type="search"
                   placeholder="Search reports..."
                   className="w-[200px] pl-8 md:w-[300px] border-blue-200 focus:border-blue-500"
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
                 />
               </div>
               <Button
                 variant="outline"
                 size="icon"
                 className="border-blue-200 text-blue-600 hover:bg-blue-100"
+                onClick={() => {
+                  setSearchTerm("");
+                  setFilteredReports(reports);
+                }}
               >
                 <Filter className="h-4 w-4" />
               </Button>
@@ -126,45 +174,41 @@ export default function ReportsPage() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="all" className="space-y-6">
-              {reports.map((report, index) => (
-                <Card key={index} className="border-blue-200">
-                  <CardHeader>
-                    <CardTitle className="text-blue-900">
-                      {report.title}
-                    </CardTitle>
-                    <CardDescription className="text-blue-600">
-                      {report.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ReportSummary
-                      company={report.company}
-                      date={report.date}
-                      revenue={report.revenue}
-                      ebitda={report.ebitda}
-                      netIncome={report.netIncome}
-                    />
-                    <div className="flex justify-end mt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mr-2 border-blue-600 text-blue-600 hover:bg-blue-100"
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Download
-                      </Button>
-                      <a href={`/analysis/${report.custom_id}`}>
-                        <Button
-                          size="sm"
-                          className="bg-blue-600 hover:bg-blue-700"
-                        >
-                          View Full Report
-                        </Button>
-                      </a>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {Array.isArray(filteredReports) ? (
+                filteredReports.length > 0 ? (
+                  filteredReports.map((report, index) => (
+                    <Card key={index} className="border-blue-200">
+                      <CardContent>
+                        <ReportSummary
+                          company={report.companyName}
+                          date={report.analysis_date}
+                          revenue={report.revenue}
+                          ebitda={report.ebitda}
+                          netIncome={report.netIncome}
+                        />
+                        <div className="flex justify-end mt-4">
+                          <a href={`/analysis/${report?.custom_id}`}>
+                            <Button
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700"
+                            >
+                              View Full Report
+                            </Button>
+                          </a>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <h1 style={{ textAlign: "center", marginTop: "20%" }}>
+                    No reports match your search
+                  </h1>
+                )
+              ) : (
+                <h1 style={{ textAlign: "center", marginTop: "20%" }}>
+                  No Reports Added
+                </h1>
+              )}
             </TabsContent>
           </Tabs>
         </div>

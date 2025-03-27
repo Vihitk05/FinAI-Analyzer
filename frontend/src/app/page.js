@@ -24,18 +24,18 @@ export default function Home() {
             </a>
           </div>
           <nav className="flex items-center gap-6">
-            <Link href="/" className="text-sm font-medium text-blue-500">
+            <Link href="/dashboard" className="text-sm font-medium text-blue-500">
               Dashboard
             </Link>
             <Link href="/reports" className="text-sm font-medium text-blue-400">
               Reports
             </Link>
-            <Link
+            {/* <Link
               href="/settings"
               className="text-sm font-medium text-blue-400"
             >
               Settings
-            </Link>
+            </Link> */}
             <Button size="sm" className="bg-blue-500 hover:bg-blue-600">
               Get Started
             </Button>
@@ -170,95 +170,44 @@ export default function Home() {
           style={{ display: "flex", justifyContent: "center", width: "100%" }}
         >
           <div className="container">
-            <h2 className="text-2xl font-bold tracking-tight mb-8 text-blue-900">
-              Try It Now
-            </h2>
-            <div className="grid gap-6 lg:grid-cols-1 ">
-              <div
-                className="space-y-6"
-                style={{
-                  display: "flex",
-                  justifyContent: "space-around",
-                  alignItems: "center",
-                }}
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-blue-800">
-                      Recent Analyses
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      <li className="flex items-center justify-between">
-                        <span className="text-sm text-blue-700">
-                          Amazon Financial Report 2023
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-500"
-                        >
-                          View
-                        </Button>
-                      </li>
-                      <li className="flex items-center justify-between">
-                        <span className="text-sm text-blue-700">
-                          Tesla Q2 Financial Statement
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-500"
-                        >
-                          View
-                        </Button>
-                      </li>
-                      <li className="flex items-center justify-between">
-                        <span className="text-sm text-blue-700">
-                          Microsoft Annual Report
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-500"
-                        >
-                          View
-                        </Button>
-                      </li>
-                    </ul>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-blue-800">
-                      Quick Analysis
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <Button
-                        className="w-full text-blue-500 border-blue-500"
-                        variant="outline"
-                      >
-                        Balance Sheet Analysis
-                      </Button>
-                      <Button
-                        className="w-full text-blue-500 border-blue-500"
-                        variant="outline"
-                      >
-                        Income Statement Review
-                      </Button>
-                      <Button
-                        className="w-full text-blue-500 border-blue-500"
-                        variant="outline"
-                      >
-                        Cash Flow Assessment
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+            <div
+              className="space-y-6"
+              style={{
+                display: "flex",
+                justifyContent: "space-around",
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              <Card className="w-full">
+                <CardHeader>
+                  <CardTitle className="text-blue-800">
+                    Quick Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Button
+                      className="w-full text-blue-500 border-blue-500"
+                      variant="outline"
+                    >
+                      Balance Sheet Analysis
+                    </Button>
+                    <Button
+                      className="w-full text-blue-500 border-blue-500"
+                      variant="outline"
+                    >
+                      Income Statement Review
+                    </Button>
+                    <Button
+                      className="w-full text-blue-500 border-blue-500"
+                      variant="outline"
+                    >
+                      Cash Flow Assessment
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </section>
