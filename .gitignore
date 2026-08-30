@@ -1,0 +1,28 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Python
+__pycache__/
+*.pyc
+env
+venv
+.venv
+*.log
+/backend/.env
+/backend/uploads/
+
+# OS
+.DS_Store
+
+# Frontend dependencies / build output
+/frontend/node_modules
+/frontend/.next/
+/frontend/out/
+/frontend/build
+/frontend/package-lock.json
+
+# Frontend env / deploy
+/frontend/.env*
+/frontend/.vercel
+/frontend/*.pem
+/frontend/*.tsbuildinfo
+/frontend/next-env.d.ts

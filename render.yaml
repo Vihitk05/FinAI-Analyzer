@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: finai-analyzer-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: LLM_PRIMARY_MODEL
+        value: nvidia/nemotron-3-ultra-550b-a55b:free
+      - key: LLM_REASONING_MODEL
+        value: z-ai/glm-5.2:free
+      - key: LLM_FAST_MODEL
+        value: google/gemma-4-26b-a4b-it:free
+      - key: CORS_ORIGINS
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MAX_UPLOAD_MB
+        value: "20"
+      - key: JOB_MAX_RETRIES
+        value: "3"
+      - key: JOB_STALE_AFTER_SECONDS
+        value: "300"
