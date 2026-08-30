@@ -107,6 +107,10 @@ def health():
     return jsonify({"status": "ok" if healthy else "degraded", "checks": checks}), (200 if healthy else 503)
 
 
+@app.route("/ping", methods=["GET"])
+def ping():
+    return jsonify({"message": "pong"}), 200
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=(config.LOG_LEVEL == "DEBUG"))
