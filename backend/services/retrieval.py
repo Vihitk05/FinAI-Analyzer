@@ -1,3 +1,5 @@
+from time import perf_counter
+
 from services.db import scored_chunks_for_query
 from services.embeddings import embed_query
 
@@ -34,7 +36,17 @@ def fuse_scored_chunks(scored_rows: list[dict], top_k: int = 5, rrf_k: int = 60)
     return results
 
 
-def hybrid_search(report_id: int, query: str, top_k: int = 5) -> list[dict]:
-    query_embedding = embed_query(query)
-    scored_rows = scored_chunks_for_query(report_id, query, query_embedding)
-    return fuse_scored_chunks(scored_rows, top_k=top_k)
+def hybrid_search(report_id: int, query: str, top_k: int = 5, *, perf=None, name: str = "query") -> list[dict]:
+    started = perf_counter()
+    query_embedding = embed_query(query, perf=perf, purpose="retrieval_query")
+    scored_rows = scored_chunks_for_query(report_id, query, query_embedding, perf=perf)
+    results = fuse_scored_chunks(scored_rows, top_k=top_k)
+    if perf is not None:
+        perf.record_hybrid_retrieval(
+            name=name,
+            top_k=top_k,
+            rows_scored=len(scored_rows),
+            rows_returned=len(results),
+            started=started,
+        )
+    return results

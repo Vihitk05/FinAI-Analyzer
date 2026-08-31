@@ -3,6 +3,7 @@ import os
 import re
 import uuid
 from functools import lru_cache
+from time import perf_counter
 
 import psycopg
 from psycopg.rows import dict_row
@@ -21,6 +22,11 @@ _SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 
 class DatabaseError(Exception):
     pass
+
+
+def _record_db(perf, name: str, kind: str, started: float, **kwargs) -> None:
+    if perf is not None:
+        perf.record_db_operation(name, kind, started, **kwargs)
 
 
 def _configure_connection(conn):
@@ -98,9 +104,11 @@ def resolve_company_id(public_id, user_id: int) -> int | None:
     return row["id"] if row else None
 
 
-def get_report_public_id(report_id: int) -> str:
+def get_report_public_id(report_id: int, *, perf=None) -> str:
+    started = perf_counter()
     with get_pool().connection() as conn:
         row = conn.execute("SELECT public_id FROM reports WHERE id = %s", (report_id,)).fetchone()
+    _record_db(perf, "get_report_public_id", "read", started, queries=1, commits=0, rows=1 if row else 0)
     return str(row["public_id"])
 
 
@@ -168,7 +176,8 @@ def insert_report(data: dict, user_id: int | None = None, status: str = "complet
         return row["id"]
 
 
-def update_report(report_id: int, data: dict, status: str | None = None):
+def update_report(report_id: int, data: dict, status: str | None = None, *, perf=None):
+    started = perf_counter()
     with get_pool().connection() as conn:
         if status is None:
             conn.execute(
@@ -195,6 +204,7 @@ def update_report(report_id: int, data: dict, status: str | None = None):
                     report_id,
                 ),
             )
+    _record_db(perf, "update_report", "write", started, queries=1, commits=1, rows=1)
 
 
 def get_report(report_id: int, user_id: int) -> dict | None:
@@ -255,8 +265,9 @@ def delete_report(report_id: int, user_id: int) -> bool:
 
 
 
-def insert_chunks(report_id: int, chunks: list[dict]):
+def insert_chunks(report_id: int, chunks: list[dict], *, perf=None):
 
+    started = perf_counter()
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM document_chunks WHERE report_id = %s", (report_id,))
@@ -265,6 +276,16 @@ def insert_chunks(report_id: int, chunks: list[dict]):
                     "INSERT INTO document_chunks (report_id, page_number, text, embedding) VALUES (%s, %s, %s, %s)",
                     [(report_id, c["page_number"], c["text"], c["embedding"]) for c in chunks],
                 )
+    _record_db(
+        perf,
+        "insert_chunks",
+        "write",
+        started,
+        queries=2 if chunks else 1,
+        commits=1,
+        rows=len(chunks),
+        bulk=bool(chunks),
+    )
 
 
 def get_report_filename(report_id: int) -> str:
@@ -276,10 +297,11 @@ def get_report_filename(report_id: int) -> str:
     return row["file_name"] if row else "Uploaded report.pdf"
 
 
-def upsert_company(user_id: int, name: str) -> dict | None:
+def upsert_company(user_id: int, name: str, *, perf=None) -> dict | None:
     normalized = normalize_company_name(name)
     if not normalized:
         return None
+    started = perf_counter()
     with get_pool().connection() as conn:
         row = conn.execute(
             """
@@ -294,12 +316,15 @@ def upsert_company(user_id: int, name: str) -> dict | None:
 
 
 
+    _record_db(perf, "upsert_company", "write", started, queries=1, commits=1, rows=1 if row else 0)
     return dict(row)
 
 
-def assign_report_company(report_id: int, company_id: int):
+def assign_report_company(report_id: int, company_id: int, *, perf=None):
+    started = perf_counter()
     with get_pool().connection() as conn:
         conn.execute("UPDATE reports SET company_id = %s, updated_at = now() WHERE id = %s", (company_id, report_id))
+    _record_db(perf, "assign_report_company", "write", started, queries=1, commits=1, rows=1)
 
 
 def get_company(company_id: int, user_id: int) -> dict | None:
@@ -353,7 +378,8 @@ def list_companies(user_id: int) -> list[dict]:
     return results
 
 
-def list_company_reports(company_id: int, user_id: int) -> list[dict]:
+def list_company_reports(company_id: int, user_id: int, *, perf=None) -> list[dict]:
+    started = perf_counter()
     with get_pool().connection() as conn:
         rows = conn.execute(
             """
@@ -363,6 +389,7 @@ def list_company_reports(company_id: int, user_id: int) -> list[dict]:
             ORDER BY r.created_at, r.id
             """, (company_id, user_id),
         ).fetchall()
+    _record_db(perf, "list_company_reports", "read", started, queries=1, commits=0, rows=len(rows))
     result = []
     for row in rows:
         data = dict(row["data"])
@@ -385,10 +412,11 @@ def list_company_report_ids(company_id: int, user_id: int) -> list[dict]:
     return [{"id": row["id"], "custom_id": str(row["public_id"])} for row in rows]
 
 
-def publish_company_dashboard(company_id: int, data: dict, source_report_ids: list[str]) -> dict:
+def publish_company_dashboard(company_id: int, data: dict, source_report_ids: list[str], *, perf=None) -> dict:
 
     if data.get("validationStatus") != "valid":
         raise DatabaseError("Refusing to publish a dashboard that did not pass validation")
+    started = perf_counter()
     with get_pool().connection() as conn:
         with conn.transaction():
 
@@ -407,6 +435,7 @@ def publish_company_dashboard(company_id: int, data: dict, source_report_ids: li
                 RETURNING id, version, generated_at, published_at
                 """, (company_id, version, json.dumps(data), json.dumps(source_report_ids))
             ).fetchone()
+    _record_db(perf, "publish_company_dashboard", "write", started, queries=4, commits=1, rows=1)
     return dict(row)
 
 
@@ -426,10 +455,11 @@ def get_current_company_dashboard(company_id: int, user_id: int) -> dict | None:
     return scrub_dashboard_public_ids(data)
 
 
-def update_chunk_texts(report_id: int, pages: list[dict]) -> int:
+def update_chunk_texts(report_id: int, pages: list[dict], *, perf=None) -> int:
 
     if not pages:
         return 0
+    started = perf_counter()
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             cur.executemany(
@@ -439,7 +469,9 @@ def update_chunk_texts(report_id: int, pages: list[dict]) -> int:
                 """,
                 [(page["text"], report_id, page["page_number"], page["text"]) for page in pages],
             )
-            return cur.rowcount
+            rowcount = cur.rowcount
+    _record_db(perf, "update_chunk_texts", "write", started, queries=1, commits=1, rows=rowcount, bulk=True)
+    return rowcount
 
 
 def get_chunks(report_id: int) -> list[dict]:
@@ -471,7 +503,7 @@ def build_or_tsquery(query_text: str) -> tuple[str, list[str]]:
     return f"({expr})", unique_words
 
 
-def scored_chunks_for_query(report_id: int, query_text: str, query_embedding: list[float]) -> list[dict]:
+def scored_chunks_for_query(report_id: int, query_text: str, query_embedding: list[float], *, perf=None) -> list[dict]:
 
     tsquery_expr, tsquery_params = build_or_tsquery(query_text)
     sql = f"""
@@ -482,8 +514,10 @@ def scored_chunks_for_query(report_id: int, query_text: str, query_embedding: li
         WHERE report_id = %s
     """
     params = [*tsquery_params, query_embedding, report_id]
+    started = perf_counter()
     with get_pool().connection() as conn:
         rows = conn.execute(sql, params).fetchall()
+    _record_db(perf, "scored_chunks_for_query", "read", started, queries=1, commits=0, rows=len(rows))
     return [dict(r) for r in rows]
 
 
@@ -567,24 +601,29 @@ def claim_next_queued_job() -> dict | None:
     return dict(row) if row else None
 
 
-def update_job_progress(job_id: str, stage: str, progress: int):
+def update_job_progress(job_id: str, stage: str, progress: int, *, perf=None):
+    started = perf_counter()
     with get_pool().connection() as conn:
         conn.execute(
             "UPDATE analysis_jobs SET stage = %s, progress = %s, updated_at = now() WHERE job_id = %s",
             (stage, progress, job_id),
         )
+    _record_db(perf, "update_job_progress", "write", started, queries=1, commits=1, rows=1)
 
 
-def update_job_metrics(job_id: str, metrics: dict):
+def update_job_metrics(job_id: str, metrics: dict, *, perf=None):
 
+    started = perf_counter()
     with get_pool().connection() as conn:
         conn.execute(
             "UPDATE analysis_jobs SET metrics = %s, updated_at = now() WHERE job_id = %s",
             (json.dumps(metrics), job_id),
         )
+    _record_db(perf, "update_job_metrics", "write", started, queries=1, commits=1, rows=1)
 
 
-def complete_job(job_id: str):
+def complete_job(job_id: str, *, perf=None):
+    started = perf_counter()
     with get_pool().connection() as conn:
         conn.execute(
             """
@@ -595,10 +634,12 @@ def complete_job(job_id: str):
             """,
             (job_id,),
         )
+    _record_db(perf, "complete_job", "write", started, queries=1, commits=1, rows=1)
 
 
-def requeue_job(job_id: str, error: str):
+def requeue_job(job_id: str, error: str, *, perf=None):
 
+    started = perf_counter()
     with get_pool().connection() as conn:
         conn.execute(
             """
@@ -609,9 +650,11 @@ def requeue_job(job_id: str, error: str):
             """,
             (error, job_id),
         )
+    _record_db(perf, "requeue_job", "write", started, queries=1, commits=1, rows=1)
 
 
-def fail_job(job_id: str, error: str):
+def fail_job(job_id: str, error: str, *, perf=None):
+    started = perf_counter()
     with get_pool().connection() as conn:
         conn.execute(
             """
@@ -621,10 +664,12 @@ def fail_job(job_id: str, error: str):
             """,
             (error, job_id),
         )
+    _record_db(perf, "fail_job", "write", started, queries=1, commits=1, rows=1)
 
 
-def mark_job_awaiting_ocr(job_id: str, metrics: dict):
+def mark_job_awaiting_ocr(job_id: str, metrics: dict, *, perf=None):
 
+    started = perf_counter()
     with get_pool().connection() as conn:
         conn.execute(
             """
@@ -635,6 +680,7 @@ def mark_job_awaiting_ocr(job_id: str, metrics: dict):
             """,
             (json.dumps(metrics), job_id),
         )
+    _record_db(perf, "mark_job_awaiting_ocr", "write", started, queries=1, commits=1, rows=1)
 
 
 def get_awaiting_ocr_job_bytes(job_id: str, user_id: int) -> tuple[bytes, str] | None:

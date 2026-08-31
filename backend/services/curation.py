@@ -4,6 +4,7 @@ import re
 import uuid
 from collections import Counter
 from datetime import datetime, timezone
+from time import perf_counter
 
 from services.number_match import number_present
 from services.conflicts import (
@@ -135,10 +136,13 @@ def _description(field: str, quote: str = "") -> str:
     return f"Contains source evidence supporting the reported {label}."
 
 
-def enrich_and_verify_citations(report: dict, pages: dict[int, str], filename: str) -> list[dict]:
+def enrich_and_verify_citations(report: dict, pages: dict[int, str], filename: str, *, perf=None) -> list[dict]:
 
+    started = perf_counter()
     verified = []
+    checked = 0
     for citation in report.get("citations") or []:
+        checked += 1
         if not isinstance(citation, dict):
             continue
         field, page = citation.get("field"), citation.get("page")
@@ -162,6 +166,13 @@ def enrich_and_verify_citations(report: dict, pages: dict[int, str], filename: s
             "verificationStatus": "verified",
             "quote": citation.get("quote", ""),
         })
+    if perf is not None:
+        perf.record_verification(
+            name="citation_numeric_source_verification",
+            started=started,
+            citations_checked=checked,
+            citations_verified=len(verified),
+        )
     return verified
 
 

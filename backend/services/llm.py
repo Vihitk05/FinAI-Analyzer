@@ -2,6 +2,7 @@ import concurrent.futures
 import json
 import re
 from functools import lru_cache
+from time import perf_counter
 
 from openai import OpenAI
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -666,24 +667,56 @@ def _is_transient(exc: Exception) -> bool:
     wait=wait_exponential(multiplier=2, min=2, max=30),
     reraise=True,
 )
-def _call_model(model, messages, tool, temperature):
+def _call_model(model, messages, tool, temperature, *, perf=None, call_name: str = "unknown", task: str = "unknown"):
     client = _client()
+    tool_name = tool["function"]["name"]
+    started = perf_counter()
     try:
         response = client.chat.completions.create(
             model=model,
             messages=messages,
             tools=[tool],
-            tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
+            tool_choice={"type": "function", "function": {"name": tool_name}},
             temperature=temperature,
         )
     except Exception as exc:
         if _is_daily_quota_exhausted(exc):
+            if perf is not None:
+                perf.record_openrouter_call(
+                    call_name=call_name,
+                    task=task,
+                    model=model,
+                    tool_name=tool_name,
+                    started=started,
+                    status="quota_exhausted",
+                    error_class=exc.__class__.__name__,
+                )
             raise QuotaExhaustedError(
                 "The free AI model quota for today is exhausted. Add your own OpenRouter API key "
                 "(LLM_API_KEY) or try again after the daily reset."
             ) from exc
         if _is_transient(exc):
+            if perf is not None:
+                perf.record_openrouter_call(
+                    call_name=call_name,
+                    task=task,
+                    model=model,
+                    tool_name=tool_name,
+                    started=started,
+                    status="transient_error",
+                    error_class=exc.__class__.__name__,
+                )
             raise TransientLLMError(str(exc)) from exc
+        if perf is not None:
+            perf.record_openrouter_call(
+                call_name=call_name,
+                task=task,
+                model=model,
+                tool_name=tool_name,
+                started=started,
+                status="error",
+                error_class=exc.__class__.__name__,
+            )
         raise LLMError(f"LLM request failed: {exc}") from exc
 
 
@@ -691,25 +724,65 @@ def _call_model(model, messages, tool, temperature):
 
 
     if not response.choices:
+        if perf is not None:
+            perf.record_openrouter_call(
+                call_name=call_name,
+                task=task,
+                model=model,
+                tool_name=tool_name,
+                started=started,
+                status="empty_response",
+                error_class="TransientLLMError",
+            )
         raise TransientLLMError("Model returned no choices in its response")
 
     tool_calls = response.choices[0].message.tool_calls
     if not tool_calls:
+        if perf is not None:
+            perf.record_openrouter_call(
+                call_name=call_name,
+                task=task,
+                model=model,
+                tool_name=tool_name,
+                started=started,
+                status="missing_tool_call",
+                error_class="LLMError",
+            )
         raise LLMError("Model did not return the expected structured output")
 
     try:
-        return json.loads(tool_calls[0].function.arguments)
+        result = json.loads(tool_calls[0].function.arguments)
     except json.JSONDecodeError as exc:
+        if perf is not None:
+            perf.record_openrouter_call(
+                call_name=call_name,
+                task=task,
+                model=model,
+                tool_name=tool_name,
+                started=started,
+                status="malformed_json",
+                error_class=exc.__class__.__name__,
+            )
         raise LLMError(f"Model returned malformed JSON: {exc}") from exc
+    if perf is not None:
+        perf.record_openrouter_call(
+            call_name=call_name,
+            task=task,
+            model=model,
+            tool_name=tool_name,
+            started=started,
+            status="success",
+        )
+    return result
 
 
-def _call_tool(messages, tool, task, temperature=0.2):
+def _call_tool(messages, tool, task, temperature=0.2, *, perf=None, call_name: str = "unknown"):
 
     chain = _TASK_MODELS[task]
     last_exc = None
     for i, model in enumerate(chain):
         try:
-            result = _call_model(model, messages, tool, temperature)
+            result = _call_model(model, messages, tool, temperature, perf=perf, call_name=call_name, task=task)
             logger.info("llm_call_served", extra=log_extra(task=task, model=model))
             return result
         except QuotaExhaustedError as exc:
@@ -760,14 +833,19 @@ def _find_verified_citation(chunks: list[dict], value) -> dict | None:
     return None
 
 
-def _verified_citations(chunks: list[dict], extracted_values: dict) -> list[dict]:
+def _verified_citations(chunks: list[dict], extracted_values: dict, *, perf=None, name: str = "llm_citation_verification") -> list[dict]:
 
+    started = perf_counter()
     citations = []
+    fields_checked = 0
+    candidates_checked = 0
     for field, value in extracted_values.items():
         if field in {"citations", "reportingScale"} or not _is_meaningful_value(value):
             continue
+        fields_checked += 1
         candidates = value if isinstance(value, list) else [value]
         for candidate in candidates:
+            candidates_checked += 1
             if isinstance(candidate, dict):
 
 
@@ -776,16 +854,30 @@ def _verified_citations(chunks: list[dict], extracted_values: dict) -> list[dict
             if found:
                 citations.append({"field": field, **found})
                 break
+    if perf is not None:
+        perf.record_verification(
+            name=name,
+            started=started,
+            citations_checked=candidates_checked,
+            citations_verified=len(citations),
+            fields_checked=fields_checked,
+        )
     return citations
 
 
-def retrieve_extraction_sections(report_id: int, document_type: str | None = None) -> dict[str, list[dict]]:
+def retrieve_extraction_sections(report_id: int, document_type: str | None = None, *, perf=None) -> dict[str, list[dict]]:
 
     sections = sections_for(document_type)
     results: dict[str, list[dict]] = {}
 
     def retrieve(section):
-        return section["name"], hybrid_search(report_id, section["query"], top_k=section.get("top_k", 3))
+        return section["name"], hybrid_search(
+            report_id,
+            section["query"],
+            top_k=section.get("top_k", 3),
+            perf=perf,
+            name=section["name"],
+        )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(sections)) as executor:
         for future in concurrent.futures.as_completed([executor.submit(retrieve, section) for section in sections]):
@@ -794,9 +886,9 @@ def retrieve_extraction_sections(report_id: int, document_type: str | None = Non
     return results
 
 
-def _extract_section(report_id: int, section: dict, chunks: list[dict] | None = None) -> dict:
+def _extract_section(report_id: int, section: dict, chunks: list[dict] | None = None, *, perf=None) -> dict:
     if chunks is None:
-        chunks = hybrid_search(report_id, section["query"], top_k=section.get("top_k", 3))
+        chunks = hybrid_search(report_id, section["query"], top_k=section.get("top_k", 3), perf=perf, name=section["name"])
     if not chunks:
         return {}
 
@@ -827,8 +919,20 @@ def _extract_section(report_id: int, section: dict, chunks: list[dict] | None = 
         f"Excerpts:\n{context}"
     )
 
-    section_result = _call_tool([{"role": "user", "content": prompt}], section["tool"], task="financial_analysis", temperature=0)
-    section_result["citations"] = _verified_citations(chunks, section_result)
+    section_result = _call_tool(
+        [{"role": "user", "content": prompt}],
+        section["tool"],
+        task="financial_analysis",
+        temperature=0,
+        perf=perf,
+        call_name=f"extract_section:{section['name']}",
+    )
+    section_result["citations"] = _verified_citations(
+        chunks,
+        section_result,
+        perf=perf,
+        name=f"llm_citation_verification:{section['name']}",
+    )
     return section_result
 
 
@@ -836,6 +940,8 @@ def extract_financial_data(
     report_id: int,
     retrieved_sections: dict[str, list[dict]] | None = None,
     document_type: str | None = None,
+    *,
+    perf=None,
 ) -> dict:
 
     merged: dict = {}
@@ -844,11 +950,11 @@ def extract_financial_data(
     quota_exhausted = False
 
     sections = sections_for(document_type)
-    retrieved_sections = retrieved_sections or retrieve_extraction_sections(report_id, document_type)
+    retrieved_sections = retrieved_sections or retrieve_extraction_sections(report_id, document_type, perf=perf)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(sections)) as executor:
         future_to_section = {
-            executor.submit(_extract_section, report_id, section, retrieved_sections.get(section["name"], [])): section
+            executor.submit(_extract_section, report_id, section, retrieved_sections.get(section["name"], []), perf=perf): section
             for section in sections
         }
         for future in concurrent.futures.as_completed(future_to_section):
@@ -896,14 +1002,21 @@ def _field_tool_property(field: str) -> dict:
     return {"type": "string"}
 
 
-def reevaluate_missing_fields(report_id: int, missing_fields: list[str], source_scale: str = "actual", cache=None) -> dict:
+def reevaluate_missing_fields(report_id: int, missing_fields: list[str], source_scale: str = "actual", cache=None, *, perf=None) -> dict:
 
     if not missing_fields:
         return {"values": {}, "citations": []}
 
     hints = [FIELD_REGISTRY[f]["retrieval_hint"] for f in missing_fields if f in FIELD_REGISTRY]
     query = ", ".join(dict.fromkeys(hints)) or ", ".join(missing_fields)
-    chunks = cache.get_or_retrieve(query, 6, hybrid_search) if cache is not None else hybrid_search(report_id, query, top_k=6)
+    retriever = lambda report, q, top_k: hybrid_search(report, q, top_k=top_k, perf=perf, name="reevaluate_missing_fields")
+    chunks = cache.get_or_retrieve(query, 6, retriever) if cache is not None else hybrid_search(
+        report_id,
+        query,
+        top_k=6,
+        perf=perf,
+        name="reevaluate_missing_fields",
+    )
     if not chunks:
         return {"values": {}, "citations": []}
 
@@ -927,12 +1040,19 @@ def reevaluate_missing_fields(report_id: int, missing_fields: list[str], source_
     )
 
     try:
-        result = _call_tool([{"role": "user", "content": prompt}], tool, task="financial_analysis", temperature=0)
+        result = _call_tool(
+            [{"role": "user", "content": prompt}],
+            tool,
+            task="financial_analysis",
+            temperature=0,
+            perf=perf,
+            call_name="reevaluate_missing_fields",
+        )
     except LLMError as exc:
         logger.warning("reevaluation_failed", extra=log_extra(report_id=report_id, error=str(exc)))
         return {"values": {}, "citations": []}
 
-    citations = _verified_citations(chunks, result)
+    citations = _verified_citations(chunks, result, perf=perf, name="llm_citation_verification:reevaluate_missing_fields")
     verified_fields = {c["field"] for c in citations}
     multiplier = _SCALE_MULTIPLIERS.get(source_scale, 1)
 
