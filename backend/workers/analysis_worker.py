@@ -7,6 +7,7 @@ from time import perf_counter
 import config
 from services import chunk_store, classification, completeness, consistency, curation, db, llm, ocr
 from services.logging_config import get_logger, log_extra
+from services.memory import log_memory
 from services.perf import PerformanceRecorder
 from services.source_cache import SourceCache
 
@@ -47,13 +48,16 @@ def _process_job(job: dict, perf: PerformanceRecorder):
     stage_started = perf_counter()
 
     client_ocr_pages = job.get("ocr_pages")
+    log_memory("before_pdf_extraction", job_id=job_id, report_id=report_id)
     try:
         pages = ocr.extract_pages_from_bytes(file_bytes, file_name, client_ocr_pages=client_ocr_pages)
     except ocr.ClientOCRRequired:
+        log_memory("after_pdf_extraction", job_id=job_id, report_id=report_id, status="awaiting_client_ocr")
         metrics["ocr"] = {"required": True, "provider": "puter_mistral", "status": "awaiting_client"}
         db.mark_job_awaiting_ocr(job_id, metrics, perf=perf)
         logger.info("job_awaiting_client_ocr", extra=log_extra(job_id=job_id, report_id=report_id))
         return "awaiting_ocr"
+    log_memory("after_pdf_extraction", job_id=job_id, report_id=report_id, pages=len(pages))
     ocr_source = "client_ocr" if client_ocr_pages else "local_text_layer"
     if client_ocr_pages:
         metrics["ocr"] = {"required": True, "provider": "puter_mistral", "status": "completed", "pages": len(pages)}
