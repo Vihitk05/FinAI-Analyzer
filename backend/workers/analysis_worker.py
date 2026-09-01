@@ -50,7 +50,7 @@ def _process_job(job: dict, perf: PerformanceRecorder):
     client_ocr_pages = job.get("ocr_pages")
     log_memory("before_pdf_extraction", job_id=job_id, report_id=report_id)
     try:
-        pages = ocr.extract_pages_from_bytes(file_bytes, file_name, client_ocr_pages=client_ocr_pages)
+        pages = ocr.extract_pages_from_bytes(file_bytes, file_name, client_ocr_pages=client_ocr_pages, perf=perf)
     except ocr.ClientOCRRequired:
         log_memory("after_pdf_extraction", job_id=job_id, report_id=report_id, status="awaiting_client_ocr")
         metrics["ocr"] = {"required": True, "provider": "puter_mistral", "status": "awaiting_client"}
@@ -90,7 +90,7 @@ def _process_job(job: dict, perf: PerformanceRecorder):
         chunk["page_number"] for chunks in retrieved_sections.values() for chunk in chunks
     }
     stage_started = perf_counter()
-    enriched_pages = ocr.enrich_pages_with_tables(file_bytes, pages, selected_page_numbers)
+    enriched_pages = ocr.enrich_pages_with_tables(file_bytes, pages, selected_page_numbers, perf=perf)
     enriched_by_page = {page["page_number"]: page for page in enriched_pages}
 
     for chunks in retrieved_sections.values():

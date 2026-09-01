@@ -1,6 +1,8 @@
 import pymupdf as fitz
+from time import perf_counter
 
 from services.logging_config import get_logger, log_extra
+from services.memory import log_memory
 
 logger = get_logger(__name__)
 
@@ -38,7 +40,7 @@ def _extract_tables_as_rows(page) -> str:
     return "\n".join(rendered)
 
 
-def extract_text_locally(pdf_bytes: bytes, *, include_tables: bool = True) -> list[dict]:
+def extract_text_locally(pdf_bytes: bytes, *, include_tables: bool = False, perf=None, timing_prefix: str = "initial") -> list[dict]:
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     except Exception as exc:
@@ -47,12 +49,22 @@ def extract_text_locally(pdf_bytes: bytes, *, include_tables: bool = True) -> li
 
     try:
         pages = []
+        text_duration_ms = 0.0
+        table_duration_ms = 0.0
+        table_pages_scanned = 0
         for i, page in enumerate(doc, start=1):
+            page_text_started = perf_counter()
             text = page.get_text("text").strip()
+            text_duration_ms += (perf_counter() - page_text_started) * 1000
             text_had_prose = bool(text)
             table_rows = ""
             if include_tables:
+                page_table_started = perf_counter()
+                log_memory(f"before_{timing_prefix}_find_tables_page", page_number=i)
                 table_rows = _extract_tables_as_rows(page)
+                log_memory(f"after_{timing_prefix}_find_tables_page", page_number=i, has_table_rows=bool(table_rows))
+                table_duration_ms += (perf_counter() - page_table_started) * 1000
+                table_pages_scanned += 1
                 if table_rows:
                     text = f"{text}{TABLE_SECTION_MARKER}{table_rows}" if text else table_rows
             if text:
@@ -62,6 +74,22 @@ def extract_text_locally(pdf_bytes: bytes, *, include_tables: bool = True) -> li
                     "_tables_extracted": include_tables,
                     "_table_rows": table_rows if table_rows and not text_had_prose else "",
                 })
+        if perf is not None:
+            timing_finished = perf_counter()
+            perf.record_stage(
+                f"pymupdf_{timing_prefix}_plain_text_extraction",
+                timing_finished - (text_duration_ms / 1000),
+                pages_scanned=len(doc),
+                pages_with_text=len(pages),
+                measured_text_duration_ms=round(text_duration_ms, 1),
+            )
+            if include_tables:
+                perf.record_stage(
+                    f"pymupdf_{timing_prefix}_find_tables",
+                    timing_finished - (table_duration_ms / 1000),
+                    pages_scanned=table_pages_scanned,
+                    measured_find_tables_duration_ms=round(table_duration_ms, 1),
+                )
         return pages
     finally:
         doc.close()
@@ -101,7 +129,7 @@ def normalize_ocr_pages(raw_pages) -> list[dict]:
     return [{"page_number": n, "text": by_page[n]} for n in sorted(by_page)]
 
 
-def enrich_pages_with_tables(pdf_bytes: bytes, pages: list[dict], page_numbers: set[int]) -> list[dict]:
+def enrich_pages_with_tables(pdf_bytes: bytes, pages: list[dict], page_numbers: set[int], *, perf=None) -> list[dict]:
     if not page_numbers:
         return pages
 
@@ -120,6 +148,8 @@ def enrich_pages_with_tables(pdf_bytes: bytes, pages: list[dict], page_numbers: 
             return pages
 
     try:
+        table_duration_ms = 0.0
+        table_pages_scanned = 0
         for page_number in wanted:
             existing = by_page[page_number]["text"]
             if by_page[page_number].get("_tables_extracted"):
@@ -128,13 +158,27 @@ def enrich_pages_with_tables(pdf_bytes: bytes, pages: list[dict], page_numbers: 
                 table_rows = by_page[page_number].get("_table_rows", "")
             else:
                 page = doc[page_number - 1]
+                page_table_started = perf_counter()
+                log_memory("before_enrichment_find_tables_page", page_number=page_number)
                 table_rows = _extract_tables_as_rows(page)
+                log_memory("after_enrichment_find_tables_page", page_number=page_number, has_table_rows=bool(table_rows))
+                table_duration_ms += (perf_counter() - page_table_started) * 1000
+                table_pages_scanned += 1
             if not table_rows:
                 continue
             if TABLE_SECTION_MARKER not in existing:
                 by_page[page_number]["text"] = (
                     f"{existing}{TABLE_SECTION_MARKER}{table_rows}" if existing else table_rows
                 )
+        if perf is not None:
+            timing_finished = perf_counter()
+            perf.record_stage(
+                "pymupdf_enrichment_find_tables",
+                timing_finished - (table_duration_ms / 1000),
+                selected_pages=len(wanted),
+                pages_scanned=table_pages_scanned,
+                measured_find_tables_duration_ms=round(table_duration_ms, 1),
+            )
     finally:
         if doc is not None:
             doc.close()
@@ -147,15 +191,25 @@ def extract_pages_from_bytes(
     filename: str,
     *,
     client_ocr_pages=None,
-    include_tables: bool = True,
+    include_tables: bool = False,
+    perf=None,
 ) -> list[dict]:
-    local_pages = extract_text_locally(pdf_bytes, include_tables=include_tables)
+    local_pages = extract_text_locally(pdf_bytes, include_tables=include_tables, perf=perf)
     if _has_meaningful_text(local_pages):
         logger.info(
             "local_text_extraction_used",
             extra=log_extra(filename=filename, pages_with_text=len(local_pages)),
         )
         return local_pages
+
+    if not include_tables:
+        table_pages = extract_text_locally(pdf_bytes, include_tables=True, perf=perf, timing_prefix="fallback")
+        if _has_meaningful_text(table_pages):
+            logger.info(
+                "local_table_extraction_used",
+                extra=log_extra(filename=filename, pages_with_text=len(table_pages)),
+            )
+            return table_pages
 
     if client_ocr_pages:
         pages = normalize_ocr_pages(client_ocr_pages)
