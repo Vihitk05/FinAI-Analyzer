@@ -49,12 +49,19 @@ def extract_text_locally(pdf_bytes: bytes, *, include_tables: bool = True) -> li
         pages = []
         for i, page in enumerate(doc, start=1):
             text = page.get_text("text").strip()
+            text_had_prose = bool(text)
+            table_rows = ""
             if include_tables:
                 table_rows = _extract_tables_as_rows(page)
                 if table_rows:
                     text = f"{text}{TABLE_SECTION_MARKER}{table_rows}" if text else table_rows
             if text:
-                pages.append({"page_number": i, "text": text})
+                pages.append({
+                    "page_number": i,
+                    "text": text,
+                    "_tables_extracted": include_tables,
+                    "_table_rows": table_rows if table_rows and not text_had_prose else "",
+                })
         return pages
     finally:
         doc.close()
@@ -103,25 +110,34 @@ def enrich_pages_with_tables(pdf_bytes: bytes, pages: list[dict], page_numbers: 
     if not wanted:
         return pages
 
-    try:
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    except Exception as exc:
-        logger.warning("table_enrichment_open_failed", extra=log_extra(error=str(exc)))
-        return pages
+    doc = None
+    needs_pdf = any(not by_page[page_number].get("_tables_extracted") for page_number in wanted)
+    if needs_pdf:
+        try:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        except Exception as exc:
+            logger.warning("table_enrichment_open_failed", extra=log_extra(error=str(exc)))
+            return pages
 
     try:
         for page_number in wanted:
-            page = doc[page_number - 1]
-            table_rows = _extract_tables_as_rows(page)
+            existing = by_page[page_number]["text"]
+            if by_page[page_number].get("_tables_extracted"):
+                if TABLE_SECTION_MARKER in existing:
+                    continue
+                table_rows = by_page[page_number].get("_table_rows", "")
+            else:
+                page = doc[page_number - 1]
+                table_rows = _extract_tables_as_rows(page)
             if not table_rows:
                 continue
-            existing = by_page[page_number]["text"]
             if TABLE_SECTION_MARKER not in existing:
                 by_page[page_number]["text"] = (
                     f"{existing}{TABLE_SECTION_MARKER}{table_rows}" if existing else table_rows
                 )
     finally:
-        doc.close()
+        if doc is not None:
+            doc.close()
 
     return [by_page[page["page_number"]] for page in pages]
 

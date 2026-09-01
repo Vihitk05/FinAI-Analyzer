@@ -11,7 +11,7 @@ from config import LLM_API_KEY, LLM_BASE_URL, LLM_FAST_MODEL, LLM_PRIMARY_MODEL,
 from services.field_registry import BROAD_DOC_TYPES, FIELD_REGISTRY, NOTE_DISCLOSURE_CATEGORIES
 from services.logging_config import get_logger, log_extra
 from services.ocr import TABLE_SECTION_MARKER
-from services.retrieval import hybrid_search
+from services.retrieval import embed_retrieval_queries, hybrid_search, hybrid_search_with_embedding
 
 logger = get_logger(__name__)
 
@@ -869,18 +869,28 @@ def retrieve_extraction_sections(report_id: int, document_type: str | None = Non
 
     sections = sections_for(document_type)
     results: dict[str, list[dict]] = {}
+    query_embeddings = embed_retrieval_queries(
+        [section["query"] for section in sections],
+        perf=perf,
+        purpose="retrieval_queries_initial",
+    )
 
-    def retrieve(section):
-        return section["name"], hybrid_search(
+    def retrieve(section, query_embedding):
+        return section["name"], hybrid_search_with_embedding(
             report_id,
             section["query"],
+            query_embedding,
             top_k=section.get("top_k", 3),
             perf=perf,
             name=section["name"],
         )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(sections)) as executor:
-        for future in concurrent.futures.as_completed([executor.submit(retrieve, section) for section in sections]):
+        futures = [
+            executor.submit(retrieve, section, query_embedding)
+            for section, query_embedding in zip(sections, query_embeddings)
+        ]
+        for future in concurrent.futures.as_completed(futures):
             name, chunks = future.result()
             results[name] = chunks
     return results

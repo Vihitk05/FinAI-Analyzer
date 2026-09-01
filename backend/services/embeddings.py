@@ -4,7 +4,7 @@ from time import perf_counter
 from config import EMBEDDING_DOCUMENT_MAX_CHARS, EMBEDDING_MODEL_NAME
 from services.memory import log_memory
 
-DOCUMENT_EMBEDDING_BATCH_SIZE = 8
+DOCUMENT_EMBEDDING_BATCH_SIZE = 16
 _UNSET = object()
 
 

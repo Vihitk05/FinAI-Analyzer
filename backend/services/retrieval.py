@@ -1,7 +1,7 @@
 from time import perf_counter
 
 from services.db import scored_chunks_for_query
-from services.embeddings import embed_query
+from services.embeddings import embed_query, embed_texts
 
 
 def fuse_scored_chunks(scored_rows: list[dict], top_k: int = 5, rrf_k: int = 60) -> list[dict]:
@@ -37,8 +37,20 @@ def fuse_scored_chunks(scored_rows: list[dict], top_k: int = 5, rrf_k: int = 60)
 
 
 def hybrid_search(report_id: int, query: str, top_k: int = 5, *, perf=None, name: str = "query") -> list[dict]:
-    started = perf_counter()
     query_embedding = embed_query(query, perf=perf, purpose="retrieval_query")
+    return hybrid_search_with_embedding(report_id, query, query_embedding, top_k=top_k, perf=perf, name=name)
+
+
+def hybrid_search_with_embedding(
+    report_id: int,
+    query: str,
+    query_embedding: list[float],
+    top_k: int = 5,
+    *,
+    perf=None,
+    name: str = "query",
+) -> list[dict]:
+    started = perf_counter()
     scored_rows = scored_chunks_for_query(report_id, query, query_embedding, perf=perf)
     results = fuse_scored_chunks(scored_rows, top_k=top_k)
     if perf is not None:
@@ -50,3 +62,7 @@ def hybrid_search(report_id: int, query: str, top_k: int = 5, *, perf=None, name
             started=started,
         )
     return results
+
+
+def embed_retrieval_queries(queries: list[str], *, perf=None, purpose: str = "retrieval_queries") -> list[list[float]]:
+    return embed_texts(queries, perf=perf, purpose=purpose)
