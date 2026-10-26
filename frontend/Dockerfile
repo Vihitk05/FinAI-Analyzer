@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
+ENV NEXT_OUTPUT=standalone
 RUN npm run build
 
 FROM node:20-slim AS run

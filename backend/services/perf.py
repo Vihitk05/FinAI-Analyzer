@@ -33,7 +33,6 @@ class PerformanceRecorder:
                 "openrouter_calls": [],
                 "hybrid_retrieval": [],
                 "embedding_batches": [],
-                "fastembed": [],
                 "db_operations": [],
                 "verification": [],
             },
@@ -102,15 +101,6 @@ class PerformanceRecorder:
             batch_size,
             vector_count,
             self.duration_ms(started),
-        )
-
-    def record_fastembed(self, *, created: bool, reused: bool, started: float, cache_info=None) -> None:
-        self._safe(
-            self._record_fastembed,
-            created,
-            reused,
-            self.duration_ms(started),
-            cache_info,
         )
 
     def record_hybrid_retrieval(
@@ -233,20 +223,6 @@ class PerformanceRecorder:
                 "vector_count": vector_count,
                 "duration_ms": duration_ms,
             })
-
-    def _record_fastembed(self, created: bool, reused: bool, duration_ms: float, cache_info) -> None:
-        event = {"created": created, "reused": reused, "duration_ms": duration_ms}
-        if cache_info is not None:
-            event["cache"] = {
-                "hits": cache_info.hits,
-                "misses": cache_info.misses,
-                "maxsize": cache_info.maxsize,
-                "currsize": cache_info.currsize,
-            }
-        with self._lock:
-            self._data["events"]["fastembed"].append(event)
-            if created:
-                self._data["timings_ms"]["fastembed_initialization"] = {"duration_ms": duration_ms}
 
     def _record_hybrid_retrieval(
         self,

@@ -4,10 +4,27 @@ import re
 from functools import lru_cache
 from time import perf_counter
 
-from openai import OpenAI
+from openai import APITimeoutError, OpenAI
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from config import LLM_API_KEY, LLM_BASE_URL, LLM_FAST_MODEL, LLM_PRIMARY_MODEL, LLM_REASONING_MODEL
+from config import (
+    LLM_API_KEY,
+    LLM_ATTEMPT_TIMEOUT_SECONDS,
+    LLM_BASE_URL,
+    LLM_FAST_MODEL,
+    LLM_PRIMARY_MODEL,
+    LLM_REASONING_MODEL,
+    LLM_SECTION_BUDGET_SECONDS,
+)
+from services.ai_errors import (
+    QUOTA_EXHAUSTED_MESSAGE,
+    LLMError,
+    LLMTimeoutError,
+    QuotaExhaustedError,
+    TransientLLMError,
+    is_daily_quota_exhausted,
+    is_transient,
+)
 from services.field_registry import BROAD_DOC_TYPES, FIELD_REGISTRY, NOTE_DISCLOSURE_CATEGORIES
 from services.logging_config import get_logger, log_extra
 from services.ocr import TABLE_SECTION_MARKER
@@ -15,17 +32,7 @@ from services.retrieval import embed_retrieval_queries, hybrid_search, hybrid_se
 
 logger = get_logger(__name__)
 
-
-class LLMError(Exception):
-    pass
-
-
-class TransientLLMError(LLMError):
-    pass
-
-
-class QuotaExhaustedError(LLMError):
-    pass
+_MIN_ATTEMPT_SECONDS = 15
 
 
 @lru_cache(maxsize=1)
@@ -646,28 +653,37 @@ _TASK_MODELS = {
 }
 
 
-def _is_daily_quota_exhausted(exc: Exception) -> bool:
-    message = str(exc).lower()
-    return any(
-        term in message
-        for term in ("free-models-per-day", "free_tier_daily", "openrouter_free_tier_daily", "free-model daily")
-    )
+def _remaining_seconds(deadline: float | None) -> float | None:
+    return None if deadline is None else deadline - perf_counter()
 
 
-def _is_transient(exc: Exception) -> bool:
-    message = str(exc).lower()
-    if _is_daily_quota_exhausted(exc):
-        return False
-    return any(term in message for term in ("rate limit", "rate-limit", "429", "timeout", "503", "502", "connection"))
+def _attempt_timeout(deadline: float | None) -> float:
+    remaining = _remaining_seconds(deadline)
+    return LLM_ATTEMPT_TIMEOUT_SECONDS if remaining is None else min(LLM_ATTEMPT_TIMEOUT_SECONDS, remaining)
+
+
+def _stop_near_deadline(retry_state) -> bool:
+    remaining = _remaining_seconds(retry_state.kwargs.get("deadline"))
+    return remaining is not None and remaining < _MIN_ATTEMPT_SECONDS
 
 
 @retry(
     retry=retry_if_exception_type(TransientLLMError),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
+    stop=stop_after_attempt(3) | _stop_near_deadline,
+    wait=wait_exponential(multiplier=1, min=2, max=8),
     reraise=True,
 )
-def _call_model(model, messages, tool, temperature, *, perf=None, call_name: str = "unknown", task: str = "unknown"):
+def _call_model(
+    model,
+    messages,
+    tool,
+    temperature,
+    *,
+    perf=None,
+    call_name: str = "unknown",
+    task: str = "unknown",
+    deadline: float | None = None,
+):
     client = _client()
     tool_name = tool["function"]["name"]
     started = perf_counter()
@@ -678,9 +694,22 @@ def _call_model(model, messages, tool, temperature, *, perf=None, call_name: str
             tools=[tool],
             tool_choice={"type": "function", "function": {"name": tool_name}},
             temperature=temperature,
+            timeout=_attempt_timeout(deadline),
         )
+    except APITimeoutError as exc:
+        if perf is not None:
+            perf.record_openrouter_call(
+                call_name=call_name,
+                task=task,
+                model=model,
+                tool_name=tool_name,
+                started=started,
+                status="timeout",
+                error_class=exc.__class__.__name__,
+            )
+        raise LLMTimeoutError(f"{model} did not answer within {round(perf_counter() - started)}s") from exc
     except Exception as exc:
-        if _is_daily_quota_exhausted(exc):
+        if is_daily_quota_exhausted(exc):
             if perf is not None:
                 perf.record_openrouter_call(
                     call_name=call_name,
@@ -691,11 +720,8 @@ def _call_model(model, messages, tool, temperature, *, perf=None, call_name: str
                     status="quota_exhausted",
                     error_class=exc.__class__.__name__,
                 )
-            raise QuotaExhaustedError(
-                "The free AI model quota for today is exhausted. Add your own OpenRouter API key "
-                "(LLM_API_KEY) or try again after the daily reset."
-            ) from exc
-        if _is_transient(exc):
+            raise QuotaExhaustedError(QUOTA_EXHAUSTED_MESSAGE) from exc
+        if is_transient(exc):
             if perf is not None:
                 perf.record_openrouter_call(
                     call_name=call_name,
@@ -776,13 +802,28 @@ def _call_model(model, messages, tool, temperature, *, perf=None, call_name: str
     return result
 
 
-def _call_tool(messages, tool, task, temperature=0.2, *, perf=None, call_name: str = "unknown"):
+def _call_tool(
+    messages,
+    tool,
+    task,
+    temperature=0.2,
+    *,
+    perf=None,
+    call_name: str = "unknown",
+    deadline: float | None = None,
+):
 
     chain = _TASK_MODELS[task]
     last_exc = None
     for i, model in enumerate(chain):
+        remaining = _remaining_seconds(deadline)
+        if remaining is not None and remaining < _MIN_ATTEMPT_SECONDS:
+            last_exc = last_exc or LLMTimeoutError(f"No time left in the budget for '{call_name}'")
+            break
         try:
-            result = _call_model(model, messages, tool, temperature, perf=perf, call_name=call_name, task=task)
+            result = _call_model(
+                model, messages, tool, temperature, perf=perf, call_name=call_name, task=task, deadline=deadline
+            )
             logger.info("llm_call_served", extra=log_extra(task=task, model=model))
             return result
         except QuotaExhaustedError as exc:
@@ -790,7 +831,7 @@ def _call_tool(messages, tool, task, temperature=0.2, *, perf=None, call_name: s
 
             logger.warning("llm_quota_exhausted", extra=log_extra(task=task, model=model))
             raise exc
-        except TransientLLMError as exc:
+        except (TransientLLMError, LLMTimeoutError) as exc:
             last_exc = exc
             logger.warning(
                 "llm_model_unavailable",
@@ -896,7 +937,14 @@ def retrieve_extraction_sections(report_id: int, document_type: str | None = Non
     return results
 
 
-def _extract_section(report_id: int, section: dict, chunks: list[dict] | None = None, *, perf=None) -> dict:
+def _extract_section(
+    report_id: int,
+    section: dict,
+    chunks: list[dict] | None = None,
+    *,
+    perf=None,
+    deadline: float | None = None,
+) -> dict:
     if chunks is None:
         chunks = hybrid_search(report_id, section["query"], top_k=section.get("top_k", 3), perf=perf, name=section["name"])
     if not chunks:
@@ -936,6 +984,7 @@ def _extract_section(report_id: int, section: dict, chunks: list[dict] | None = 
         temperature=0,
         perf=perf,
         call_name=f"extract_section:{section['name']}",
+        deadline=deadline,
     )
     section_result["citations"] = _verified_citations(
         chunks,
@@ -961,10 +1010,18 @@ def extract_financial_data(
 
     sections = sections_for(document_type)
     retrieved_sections = retrieved_sections or retrieve_extraction_sections(report_id, document_type, perf=perf)
+    deadline = perf_counter() + LLM_SECTION_BUDGET_SECONDS
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(sections)) as executor:
         future_to_section = {
-            executor.submit(_extract_section, report_id, section, retrieved_sections.get(section["name"], []), perf=perf): section
+            executor.submit(
+                _extract_section,
+                report_id,
+                section,
+                retrieved_sections.get(section["name"], []),
+                perf=perf,
+                deadline=deadline,
+            ): section
             for section in sections
         }
         for future in concurrent.futures.as_completed(future_to_section):
@@ -985,10 +1042,7 @@ def extract_financial_data(
 
     if succeeded == 0:
         if quota_exhausted:
-            raise QuotaExhaustedError(
-                "The free AI model quota for today is exhausted. Add your own OpenRouter API key "
-                "(LLM_API_KEY) or try again after the daily reset."
-            )
+            raise QuotaExhaustedError(QUOTA_EXHAUSTED_MESSAGE)
         raise LLMError("All extraction sections failed - see logs for the underlying errors")
 
     merged["citations"] = citations
@@ -1012,7 +1066,15 @@ def _field_tool_property(field: str) -> dict:
     return {"type": "string"}
 
 
-def reevaluate_missing_fields(report_id: int, missing_fields: list[str], source_scale: str = "actual", cache=None, *, perf=None) -> dict:
+def reevaluate_missing_fields(
+    report_id: int,
+    missing_fields: list[str],
+    source_scale: str = "actual",
+    cache=None,
+    *,
+    perf=None,
+    deadline: float | None = None,
+) -> dict:
 
     if not missing_fields:
         return {"values": {}, "citations": []}
@@ -1057,6 +1119,7 @@ def reevaluate_missing_fields(report_id: int, missing_fields: list[str], source_
             temperature=0,
             perf=perf,
             call_name="reevaluate_missing_fields",
+            deadline=deadline,
         )
     except LLMError as exc:
         logger.warning("reevaluation_failed", extra=log_extra(report_id=report_id, error=str(exc)))

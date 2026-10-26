@@ -1,5 +1,5 @@
 from services import db
-from services.embeddings import DOCUMENT_EMBEDDING_BATCH_SIZE, compact_document_text, embed_texts
+from services.embeddings import compact_document_text, embed_texts
 from services.logging_config import get_logger, log_extra
 from services.memory import log_memory
 
@@ -20,15 +20,9 @@ def store_chunks(report_id: int, pages: list[dict], *, perf=None) -> int:
             embedded_chars=sum(len(text) for text in compacted),
         )
 
-    log_memory("before_document_embedding", chunks=len(compacted), batch_size=DOCUMENT_EMBEDDING_BATCH_SIZE)
-    embeddings = embed_texts(
-        compacted,
-        perf=perf,
-        purpose="document_chunks",
-        batch_size=DOCUMENT_EMBEDDING_BATCH_SIZE,
-        parallel=None,
-    )
-    log_memory("after_document_embedding", chunks=len(compacted), batch_size=DOCUMENT_EMBEDDING_BATCH_SIZE)
+    log_memory("before_document_embedding", chunks=len(compacted))
+    embeddings = embed_texts(compacted, perf=perf, purpose="document_chunks")
+    log_memory("after_document_embedding", chunks=len(compacted))
 
     chunks = [
         {"page_number": page["page_number"], "text": page["text"], "embedding": embedding}
@@ -40,6 +34,20 @@ def store_chunks(report_id: int, pages: list[dict], *, perf=None) -> int:
         perf.set_count("chunks", len(chunks))
     logger.info("chunks_stored", extra=log_extra(report_id=report_id, chunk_count=len(chunks)))
     return len(chunks)
+
+
+def backfill_missing_embeddings(report_id: int, *, perf=None) -> int:
+    missing = db.get_chunks_missing_embeddings(report_id)
+    if not missing:
+        return 0
+    embeddings = embed_texts(
+        [compact_document_text(chunk["text"]) for chunk in missing],
+        perf=perf,
+        purpose="embedding_backfill",
+    )
+    db.set_chunk_embeddings([(chunk["id"], embedding) for chunk, embedding in zip(missing, embeddings)])
+    logger.info("chunk_embeddings_backfilled", extra=log_extra(report_id=report_id, chunk_count=len(missing)))
+    return len(missing)
 
 
 def get_chunks(report_id: int) -> list[dict]:

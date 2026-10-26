@@ -63,8 +63,20 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     page_number INTEGER NOT NULL,
     text TEXT NOT NULL,
     tsv TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', text)) STORED,
-    embedding VECTOR(384) NOT NULL
+    embedding VECTOR(1024)
 );
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = 'document_chunks'::regclass AND attname = 'embedding' AND atttypmod <> 1024
+    ) THEN
+        DROP INDEX IF EXISTS document_chunks_embedding_idx;
+        ALTER TABLE document_chunks ALTER COLUMN embedding DROP NOT NULL;
+        ALTER TABLE document_chunks ALTER COLUMN embedding TYPE VECTOR(1024) USING NULL;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS analysis_jobs (
     id SERIAL PRIMARY KEY,
@@ -116,8 +128,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS export_jobs_public_id_idx ON export_jobs (publ
 
 CREATE INDEX IF NOT EXISTS document_chunks_report_id_idx ON document_chunks (report_id);
 CREATE INDEX IF NOT EXISTS document_chunks_tsv_idx ON document_chunks USING GIN (tsv);
-CREATE INDEX IF NOT EXISTS document_chunks_embedding_idx
-    ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 CREATE INDEX IF NOT EXISTS reports_user_id_idx ON reports (user_id);
 CREATE INDEX IF NOT EXISTS reports_user_id_created_at_idx ON reports (user_id, created_at DESC);

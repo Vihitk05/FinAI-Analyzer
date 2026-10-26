@@ -23,7 +23,7 @@ def _process_job(job: dict, perf: PerformanceRecorder):
     report_id = job["report_id"]
 
     perf.set_audit(
-        fastembed_cache="lru_cache(maxsize=1) per process",
+        embedding_provider=f"{config.EMBEDDING_MODEL_NAME} via API ({config.EMBEDDING_DIMENSIONS} dims)",
         openrouter_client_cache="lru_cache(maxsize=1) per process",
         db_pool="psycopg_pool ConnectionPool min_size=1 max_size=5 per process",
         retry_policy="job retries requeue the whole job; OpenRouter transient retries repeat only the failed call",
@@ -148,13 +148,19 @@ def _process_job(job: dict, perf: PerformanceRecorder):
     report_completeness = completeness.evaluate_completeness(extracted, document_type)
     reevaluated_fields: list[str] = []
     missing = completeness.missing_fields_worth_reevaluating(report_completeness)
-    if missing:
+    reevaluation_deadline = min(
+        perf_counter() + config.LLM_REEVALUATION_BUDGET_SECONDS,
+        started + config.ANALYSIS_TARGET_SECONDS,
+    )
+    reevaluation_skipped = bool(missing) and reevaluation_deadline - perf_counter() < 15
+    if missing and not reevaluation_skipped:
         recovered = llm.reevaluate_missing_fields(
             report_id,
             missing,
             source_scale=extracted.get("sourceReportingScale", "actual"),
             cache=source_cache,
             perf=perf,
+            deadline=reevaluation_deadline,
         )
         if recovered["values"]:
             extracted.update(recovered["values"])
@@ -172,6 +178,7 @@ def _process_job(job: dict, perf: PerformanceRecorder):
         stage_started,
         missing_before=len(missing),
         recovered=len(reevaluated_fields),
+        skipped_for_time=reevaluation_skipped,
         cache_retrieval_hits=source_cache.stats["retrieval_hits"],
         cache_retrieval_misses=source_cache.stats["retrieval_misses"],
     )

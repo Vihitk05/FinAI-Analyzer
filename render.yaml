@@ -16,7 +16,7 @@ services:
       - key: LLM_PRIMARY_MODEL
         value: nvidia/nemotron-3-ultra-550b-a55b:free
       - key: LLM_REASONING_MODEL
-        value: z-ai/glm-5.2:free
+        value: nvidia/nemotron-3.5-super-vl:free
       - key: LLM_FAST_MODEL
         value: google/gemma-4-26b-a4b-it:free
       - key: CORS_ORIGINS

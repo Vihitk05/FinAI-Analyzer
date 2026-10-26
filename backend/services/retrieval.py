@@ -1,5 +1,6 @@
 from time import perf_counter
 
+from services.chunk_store import backfill_missing_embeddings
 from services.db import scored_chunks_for_query
 from services.embeddings import embed_query, embed_texts
 
@@ -37,6 +38,7 @@ def fuse_scored_chunks(scored_rows: list[dict], top_k: int = 5, rrf_k: int = 60)
 
 
 def hybrid_search(report_id: int, query: str, top_k: int = 5, *, perf=None, name: str = "query") -> list[dict]:
+    backfill_missing_embeddings(report_id, perf=perf)
     query_embedding = embed_query(query, perf=perf, purpose="retrieval_query")
     return hybrid_search_with_embedding(report_id, query, query_embedding, top_k=top_k, perf=perf, name=name)
 

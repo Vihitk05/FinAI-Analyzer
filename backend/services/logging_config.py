@@ -31,7 +31,7 @@ def configure_logging(level="INFO"):
     if level != "DEBUG":
         for noisy in (
             "werkzeug", "psycopg", "psycopg.pool", "urllib3",
-            "httpx", "httpcore", "openai", "fastembed",
+            "httpx", "httpcore", "openai",
         ):
             logging.getLogger(noisy).setLevel(logging.WARNING)
 

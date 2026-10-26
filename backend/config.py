@@ -17,7 +17,7 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://openrouter.ai/api/v1")
 
 
 LLM_PRIMARY_MODEL = os.environ.get("LLM_PRIMARY_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
-LLM_REASONING_MODEL = os.environ.get("LLM_REASONING_MODEL", "z-ai/glm-5.2:free")
+LLM_REASONING_MODEL = os.environ.get("LLM_REASONING_MODEL", "nvidia/nemotron-3.5-super-vl:free")
 LLM_FAST_MODEL = os.environ.get("LLM_FAST_MODEL", "google/gemma-4-26b-a4b-it:free")
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
@@ -33,9 +33,20 @@ MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 ALLOWED_UPLOAD_EXTENSIONS = {".pdf"}
 
-EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
+EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "nvidia/llama-nemotron-embed-vl-1b-v2:free")
+EMBEDDING_BASE_URL = os.environ.get("EMBEDDING_BASE_URL", LLM_BASE_URL)
+EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY") or LLM_API_KEY
 
-EMBEDDING_DOCUMENT_MAX_CHARS = int(os.environ.get("EMBEDDING_DOCUMENT_MAX_CHARS", "400"))
+EMBEDDING_DIMENSIONS = 1024
+
+EMBEDDING_DOCUMENT_MAX_CHARS = int(os.environ.get("EMBEDDING_DOCUMENT_MAX_CHARS", "8000"))
+EMBEDDING_BATCH_SIZE = int(os.environ.get("EMBEDDING_BATCH_SIZE", "128"))
+EMBEDDING_TIMEOUT_SECONDS = float(os.environ.get("EMBEDDING_TIMEOUT_SECONDS", "60"))
+
+LLM_ATTEMPT_TIMEOUT_SECONDS = float(os.environ.get("LLM_ATTEMPT_TIMEOUT_SECONDS", "80"))
+LLM_SECTION_BUDGET_SECONDS = float(os.environ.get("LLM_SECTION_BUDGET_SECONDS", "105"))
+LLM_REEVALUATION_BUDGET_SECONDS = float(os.environ.get("LLM_REEVALUATION_BUDGET_SECONDS", "50"))
+ANALYSIS_TARGET_SECONDS = float(os.environ.get("ANALYSIS_TARGET_SECONDS", "170"))
 
 
 AUTH_SECRET = os.environ.get("AUTH_SECRET")

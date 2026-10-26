@@ -474,6 +474,26 @@ def update_chunk_texts(report_id: int, pages: list[dict], *, perf=None) -> int:
     return rowcount
 
 
+def get_chunks_missing_embeddings(report_id: int) -> list[dict]:
+    with get_pool().connection() as conn:
+        rows = conn.execute(
+            "SELECT id, text FROM document_chunks WHERE report_id = %s AND embedding IS NULL ORDER BY page_number",
+            (report_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_chunk_embeddings(rows: list[tuple[int, list[float]]]) -> None:
+    if not rows:
+        return
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                "UPDATE document_chunks SET embedding = %s WHERE id = %s",
+                [(embedding, chunk_id) for chunk_id, embedding in rows],
+            )
+
+
 def get_chunks(report_id: int) -> list[dict]:
     with get_pool().connection() as conn:
         rows = conn.execute(
@@ -509,7 +529,7 @@ def scored_chunks_for_query(report_id: int, query_text: str, query_embedding: li
     sql = f"""
         SELECT page_number, text,
                ts_rank_cd(tsv, {tsquery_expr}) AS text_score,
-               1 - (embedding <=> %s::vector) AS vector_score
+               COALESCE(1 - (embedding <=> %s::vector), -1) AS vector_score
         FROM document_chunks
         WHERE report_id = %s
     """
