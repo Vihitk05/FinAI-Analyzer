@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from time import perf_counter
 
 from services.number_match import number_present
@@ -30,6 +30,8 @@ STATUS_NEEDS_REVIEW = "needs_review"
 STATUS_CONFLICTING = "conflicting"
 STATUS_UNAVAILABLE = "unavailable"
 STATUS_NOT_APPLICABLE = "not_applicable"
+
+BUILDER_VERSION = 2
 
 
 
@@ -328,6 +330,142 @@ def _period(report: dict) -> str:
     return str(report.get("reportingPeriod") or report.get("analysis_date") or "Undated report")
 
 
+_MONTHS = {
+    name: number
+    for number, names in enumerate(
+        [("january", "jan"), ("february", "feb"), ("march", "mar"), ("april", "apr"), ("may",), ("june", "jun"),
+         ("july", "jul"), ("august", "aug"), ("september", "sep", "sept"), ("october", "oct"),
+         ("november", "nov"), ("december", "dec")],
+        start=1,
+    )
+    for name in names
+}
+
+_PERIOD_LENGTHS = [
+    (re.compile(r"\b(three|3)[\s-]+months?\b|\bq[1-4]\b|\bquarter"), 3),
+    (re.compile(r"\b(six|6)[\s-]+months?\b|\bh[12]\b|\bhalf[\s-]+year|\b(first|second) half\b"), 6),
+    (re.compile(r"\b(nine|9)[\s-]+months?\b|\b9m\b"), 9),
+    (re.compile(r"\b(twelve|12)[\s-]+months?\b|\byear\b|\bfy\s?'?\d|\bannual\b|\bfiscal\b"), 12),
+]
+
+_MONTH_DAY_YEAR = re.compile(r"\b([a-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b")
+_DAY_MONTH_YEAR = re.compile(r"\b(\d{1,2})\s+([a-z]{3,9})\.?,?\s+(\d{4})\b")
+_ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+_QUARTER_YEAR = re.compile(r"\bq([1-4])\s*(?:fy\s*)?'?(\d{4})\b")
+_HALF_YEAR = re.compile(r"\bh([12])\s*(?:fy\s*)?'?(\d{4})\b")
+_FISCAL_YEAR = re.compile(r"\b(?:fy|fiscal(?: year)?)\s*'?(\d{4}|\d{2})\b")
+_ORDINAL_QUARTER = re.compile(r"\b(first|second|third|fourth) quarter(?: of)?(?: fiscal(?: year)?| fy)?\s*'?(\d{4})\b")
+_ORDINALS = {"first": 1, "second": 2, "third": 3, "fourth": 4}
+_QUARTER_END_DAY = {3: 31, 6: 30, 9: 30, 12: 31}
+
+
+def _period_months(report: dict) -> int | None:
+    text = str(report.get("reportingPeriod") or "").lower()
+    for pattern, months in _PERIOD_LENGTHS:
+        if pattern.search(text):
+            return months
+    return None
+
+
+def _safe_date(year: int, month: int, day: int) -> date | None:
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def _period_end(report: dict) -> date | None:
+    text = str(report.get("reportingPeriod") or "").lower()
+    match = _MONTH_DAY_YEAR.search(text)
+    if match and match.group(1) in _MONTHS:
+        return _safe_date(int(match.group(3)), _MONTHS[match.group(1)], int(match.group(2)))
+    match = _DAY_MONTH_YEAR.search(text)
+    if match and match.group(2) in _MONTHS:
+        return _safe_date(int(match.group(3)), _MONTHS[match.group(2)], int(match.group(1)))
+    match = _ISO_DATE.search(text)
+    if match:
+        return _safe_date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    match = _QUARTER_YEAR.search(text)
+    if match:
+        month = int(match.group(1)) * 3
+        return _safe_date(int(match.group(2)), month, _QUARTER_END_DAY[month])
+    match = _ORDINAL_QUARTER.search(text)
+    if match:
+        month = _ORDINALS[match.group(1)] * 3
+        return _safe_date(int(match.group(2)), month, _QUARTER_END_DAY[month])
+    match = _HALF_YEAR.search(text)
+    if match:
+        month = int(match.group(1)) * 6
+        return _safe_date(int(match.group(2)), month, _QUARTER_END_DAY[month])
+    match = _FISCAL_YEAR.search(text)
+    if match:
+        year = int(match.group(1))
+        return _safe_date(year + 2000 if year < 100 else year, 12, 31)
+    return None
+
+
+def _sort_by_period(reports: list[dict]) -> list[dict]:
+    if reports and all(_period_end(r) for r in reports):
+        return sorted(reports, key=lambda r: (_period_end(r), r.get("created_at") or ""))
+    return reports
+
+
+def _comparable_reports(reports: list[dict]) -> list[dict]:
+    if not reports:
+        return []
+    months = _period_months(reports[-1])
+    if months is None:
+        return []
+    by_end_date = {}
+    for report in reports:
+        end = _period_end(report)
+        if end and _period_months(report) == months:
+            by_end_date[end] = report
+    return [by_end_date[end] for end in sorted(by_end_date)]
+
+
+_BREAKDOWN_FIELDS = (
+    "incomeStatementRevenueBreakdown", "incomeStatementExpenseAllocation",
+    "balanceSheetAssetsComposition", "balanceSheetLiabilitiesEquity",
+    "segmentRevenueBreakdown", "segmentProfitBreakdown",
+    "geographicRevenueBreakdown", "geographicProfitBreakdown",
+)
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_subtotal(amount: float, previous_rows: list[dict]) -> bool:
+    running = 0
+    for count, row in enumerate(reversed(previous_rows), start=1):
+        running += row["amount"]
+        if count >= 2 and abs(running - amount) <= abs(amount) * 0.001:
+            return True
+    return False
+
+
+def _line_items_only(rows) -> list:
+    if not isinstance(rows, list):
+        return rows
+    items = []
+    for row in rows:
+        if not isinstance(row, dict) or not _is_number(row.get("amount")) or row["amount"] == 0:
+            continue
+        if _is_subtotal(row["amount"], items):
+            continue
+        items.append(row)
+    return items
+
+
+def _with_line_items_only(report: dict) -> dict:
+    cleaned = dict(report)
+    for field in _BREAKDOWN_FIELDS:
+        if isinstance(report.get(field), list):
+            cleaned[field] = _line_items_only(report[field])
+    return cleaned
+
+
 def _metric_series(reports: list[dict], field: str) -> list[dict]:
     result = []
     for report in reports:
@@ -356,6 +494,7 @@ def _derived_change(field: str, series: list[dict]) -> dict | None:
     return {
         "kind": "calculated_metric", "field": f"{field}Change", "label": f"{label.title()} change",
         "value": round(change, 2), "unit": "%", "formula": formula,
+        "basis": f"{current['period']} vs {prior['period']}",
         "inputs": inputs,
         "citations": prior["citations"] + current["citations"], "verificationStatus": "verified",
         "valueType": "calculated", "status": STATUS_CALCULATED,
@@ -461,6 +600,7 @@ def build_dashboard(company: dict, reports: list[dict], scope: str = "company") 
     if scope not in {"company", "report"}:
         raise ValueError(f"Unsupported dashboard scope: {scope}")
     reports = sorted(reports, key=lambda r: (r.get("created_at") or "", str(r.get("custom_id") or "")))
+    reports = _sort_by_period([_with_line_items_only(r) for r in reports])
     currency_counts = Counter((r.get("currency") or "").upper() for r in reports if r.get("currency"))
     currency = currency_counts.most_common(1)[0][0] if currency_counts else ""
     compatible = [r for r in reports if not currency or (r.get("currency") or "").upper() == currency]
@@ -486,8 +626,9 @@ def build_dashboard(company: dict, reports: list[dict], scope: str = "company") 
         "revenue", "ebitda", "netIncome", "operatingProfit", "grossProfit",
         "freeCashFlow", "cashFlowOperations", "totalAssets", "totalEquity", "totalDebt",
     )
+    comparable = _comparable_reports(compatible)
     for field in _CHANGE_FIELDS:
-        series = _metric_series(compatible, field)
+        series = _metric_series(comparable, field)
         if len(series) < 2:
             continue
         if field in _CHART_FIELDS:
@@ -544,7 +685,7 @@ def build_dashboard(company: dict, reports: list[dict], scope: str = "company") 
     for item in derived:
         if item["field"] == "revenueChange":
             direction = "increased" if item["value"] > 0 else "declined"
-            insights.append({"kind": "inferred_conclusion", "title": f"Revenue {direction}", "statement": f"Revenue {direction} {abs(item['value']):.1f}% between the two latest comparable reports.", "why": "This conclusion is calculated from reported revenue values.", "citations": item["citations"], "verificationStatus": "verified"})
+            insights.append({"kind": "inferred_conclusion", "title": f"Revenue {direction}", "statement": f"Revenue {direction} {abs(item['value']):.1f}% ({item['basis']}).", "why": "This conclusion is calculated from reported revenue values.", "citations": item["citations"], "verificationStatus": "verified"})
             if item["value"] < 0:
                 insights.append({"kind": "recommendation", "title": "Investigate revenue pressure", "statement": "Monitor the drivers of the reported revenue decline and assess whether it is temporary or structural.", "why": "The recommendation follows the verified decline in reported revenue; it is not a reported management statement.", "citations": item["citations"], "verificationStatus": "verified"})
 
@@ -588,6 +729,7 @@ def build_dashboard(company: dict, reports: list[dict], scope: str = "company") 
 
     return {
         "scope": scope, "validationStatus": "valid", "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "builderVersion": BUILDER_VERSION,
         "company": {"id": company.get("id"), "name": company.get("name") or latest.get("companyName", "")},
         "currency": currency, "currencyMismatch": len(currency_counts) > 1,
         "reportingPeriod": _period(latest) if latest else "",
@@ -616,7 +758,7 @@ def build_dashboard(company: dict, reports: list[dict], scope: str = "company") 
 
 def current_or_fresh_company_dashboard(stored: dict | None, company: dict, reports: list[dict]) -> dict:
 
-    if stored and "fieldStatuses" in stored:
+    if stored and stored.get("builderVersion") == BUILDER_VERSION:
         return stored
     return build_dashboard(company, reports)
 

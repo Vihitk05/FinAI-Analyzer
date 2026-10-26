@@ -114,6 +114,7 @@ _SECTIONS = [
                 "dilutedEps": {"description": "Diluted earnings per share, exactly as printed. Do not compute it yourself."},
                 "incomeStatementRevenueBreakdown": {
                     "type": "array",
+                    "description": "Individual line items exactly as printed. Do not include totals, subtotals or rows that add up other rows.",
                     "items": {
                         "type": "object",
                         "properties": {"category": {"type": "string"}, "amount": {}},
@@ -121,6 +122,7 @@ _SECTIONS = [
                 },
                 "incomeStatementExpenseAllocation": {
                     "type": "array",
+                    "description": "Individual line items exactly as printed. Do not include totals, subtotals or rows that add up other rows.",
                     "items": {
                         "type": "object",
                         "properties": {"category": {"type": "string"}, "amount": {}},
@@ -188,6 +190,7 @@ _SECTIONS = [
                 "totalDebt": {"description": _SCALE_DESCRIPTION + " Total borrowings if reported as a single figure; otherwise leave 0 and rely on short/long-term debt."},
                 "balanceSheetAssetsComposition": {
                     "type": "array",
+                    "description": "Individual line items exactly as printed. Do not include totals, subtotals or rows that add up other rows.",
                     "items": {
                         "type": "object",
                         "properties": {"category": {"type": "string"}, "amount": {}},
@@ -195,6 +198,7 @@ _SECTIONS = [
                 },
                 "balanceSheetLiabilitiesEquity": {
                     "type": "array",
+                    "description": "Individual line items exactly as printed. Do not include totals, subtotals or rows that add up other rows.",
                     "items": {
                         "type": "object",
                         "properties": {"category": {"type": "string"}, "amount": {}},

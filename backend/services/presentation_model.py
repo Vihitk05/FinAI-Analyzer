@@ -101,7 +101,7 @@ def build_presentation_model(data: dict) -> PresentationModel:
     if data.get("derivedMetrics"):
         add(Section("derived", "table", "Period-over-Period Changes", body={
             "columns": ["Metric", "Change", "Basis"],
-            "rows": [[m.get("label", _label(m.get("field"))), f"{m.get('value')}{m.get('unit', '')}", m.get("formula", "")]
+            "rows": [[m.get("label", _label(m.get("field"))), f"{m.get('value')}{m.get('unit', '')}", m.get("basis") or m.get("formula", "")]
                      for m in data["derivedMetrics"]],
         }, source_refs=_refs(*data["derivedMetrics"]), dashboard_keys=("derivedMetrics",)))
 
